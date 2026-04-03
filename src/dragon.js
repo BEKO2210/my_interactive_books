@@ -1,184 +1,237 @@
-// Medieval manuscript illumination dragon — SVG
-// Flat, ornate, painted style like 13th-15th century marginalia
+// Black silhouette serpentine dragon — 3 segments that weave through text
+// Inspired by medieval manuscript marginalia, circular coiling style
 
-export const DRAGON_WIDTH = 140
-export const DRAGON_HEIGHT = 150
+// Each segment is an independent obstacle for text displacement
+// Head → Body → Tail, connected visually by a curved spine
 
-export function createDragonSVG() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  svg.setAttribute('viewBox', '0 0 280 300')
-  svg.setAttribute('width', DRAGON_WIDTH)
-  svg.setAttribute('height', DRAGON_HEIGHT)
-  svg.setAttribute('fill', 'none')
-  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+export const SEGMENT_SIZE = 100 // each segment's bounding box
+export const SEGMENT_COUNT = 3
 
+// The dragon is built from 3 SVG segments that follow each other
+// with physics-based delay, creating a serpentine weaving effect
+
+export function createHeadSVG() {
+  const svg = _svg(120, 120, '0 0 200 200')
   svg.innerHTML = `
     <defs>
-      <linearGradient id="bodyGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#8b1a1a"/>
-        <stop offset="50%" stop-color="#6b1510"/>
-        <stop offset="100%" stop-color="#4a0e0a"/>
-      </linearGradient>
-      <linearGradient id="wingGrad" x1="0" y1="0" x2="0.8" y2="1">
-        <stop offset="0%" stop-color="#c4943a"/>
-        <stop offset="40%" stop-color="#a87830"/>
-        <stop offset="100%" stop-color="#785520"/>
-      </linearGradient>
-      <linearGradient id="wingGrad2" x1="1" y1="0" x2="0.2" y2="1">
-        <stop offset="0%" stop-color="#c4943a"/>
-        <stop offset="40%" stop-color="#a87830"/>
-        <stop offset="100%" stop-color="#785520"/>
-      </linearGradient>
-      <radialGradient id="eyeGlow" cx="0.5" cy="0.5" r="0.5">
-        <stop offset="0%" stop-color="#ffdd44"/>
-        <stop offset="60%" stop-color="#cc8800"/>
-        <stop offset="100%" stop-color="#884400"/>
-      </radialGradient>
-      <linearGradient id="bellyGrad" x1="0.5" y1="0" x2="0.5" y2="1">
-        <stop offset="0%" stop-color="#d4a040"/>
-        <stop offset="100%" stop-color="#b08030"/>
-      </linearGradient>
+      <clipPath id="head-clip"><circle cx="100" cy="100" r="98"/></clipPath>
     </defs>
+    <g clip-path="url(#head-clip)">
+      <!-- Head mass -->
+      <path d="M 100 20 Q 155 20 170 55 Q 185 85 175 110 Q 168 130 150 145
+               Q 130 158 100 160 Q 70 158 50 145 Q 32 130 25 110
+               Q 15 85 30 55 Q 45 20 100 20 Z"
+            fill="#1a1008" stroke="none"/>
 
-    <!-- Left Wing (behind body) -->
-    <g opacity="0.9">
-      <path d="M 90 120 Q 20 60 30 20 Q 45 50 60 55 Q 30 30 40 8 Q 55 40 70 50 Q 50 15 65 2 Q 72 38 82 55 L 100 100 Z"
-            fill="url(#wingGrad)" stroke="#5a3a10" stroke-width="1.5"/>
-      <!-- Wing membrane lines -->
-      <path d="M 90 115 Q 50 70 38 18" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
-      <path d="M 92 110 Q 55 65 52 12" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
-      <path d="M 95 105 Q 65 55 68 5" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
+      <!-- Snout -->
+      <path d="M 55 105 Q 40 95 28 100 Q 18 105 15 115 Q 12 125 20 130
+               Q 28 135 40 130 Q 50 125 55 115 Z"
+            fill="#1a1008"/>
+      <path d="M 145 105 Q 160 95 172 100 Q 182 105 185 115 Q 188 125 180 130
+               Q 172 135 160 130 Q 150 125 145 115 Z"
+            fill="#1a1008"/>
+
+      <!-- Jaw / lower mouth -->
+      <path d="M 65 130 Q 80 150 100 155 Q 120 150 135 130 Q 120 140 100 142 Q 80 140 65 130 Z"
+            fill="#0f0a04"/>
+
+      <!-- Teeth -->
+      <path d="M 58 122 L 54 132 L 62 126 Z" fill="#d4c4a0"/>
+      <path d="M 68 128 L 66 138 L 72 131 Z" fill="#d4c4a0"/>
+      <path d="M 142 122 L 146 132 L 138 126 Z" fill="#d4c4a0"/>
+      <path d="M 132 128 L 134 138 L 128 131 Z" fill="#d4c4a0"/>
+
+      <!-- Nostril smoke -->
+      <path d="M 30 108 Q 22 98 25 88 Q 28 80 23 70" fill="none" stroke="#2a2018" stroke-width="2.5" opacity="0.3" stroke-linecap="round"/>
+      <path d="M 170 108 Q 178 98 175 88 Q 172 80 177 70" fill="none" stroke="#2a2018" stroke-width="2.5" opacity="0.3" stroke-linecap="round"/>
+
+      <!-- Horns -->
+      <path d="M 65 45 Q 50 20 38 5 Q 48 18 55 35 Q 58 42 62 48" fill="#1a1008"/>
+      <path d="M 135 45 Q 150 20 162 5 Q 152 18 145 35 Q 142 42 138 48" fill="#1a1008"/>
+
+      <!-- Spines on top -->
+      <path d="M 82 25 L 78 8 L 88 22 Z" fill="#1a1008"/>
+      <path d="M 100 22 L 100 3 L 105 20 Z" fill="#1a1008"/>
+      <path d="M 118 25 L 122 8 L 112 22 Z" fill="#1a1008"/>
+
+      <!-- Eye sockets -->
+      <ellipse cx="75" cy="78" rx="14" ry="15" fill="#c4943a"/>
+      <ellipse cx="125" cy="78" rx="14" ry="15" fill="#c4943a"/>
+
+      <!-- Pupils (slit) -->
+      <ellipse cx="75" cy="78" rx="4" ry="12" fill="#1a1008"/>
+      <ellipse cx="125" cy="78" rx="4" ry="12" fill="#1a1008"/>
+
+      <!-- Eye shine -->
+      <circle cx="80" cy="73" r="3" fill="#fff" opacity="0.5"/>
+      <circle cx="130" cy="73" r="3" fill="#fff" opacity="0.5"/>
+
+      <!-- Blink eyelids (animated) -->
+      <ellipse class="dragon-eyelid-l" cx="75" cy="78" rx="15" ry="0" fill="#1a1008">
+        <animate attributeName="ry" values="0;16;0" dur="0.15s" begin="blink.begin" fill="freeze"/>
+      </ellipse>
+      <ellipse class="dragon-eyelid-r" cx="125" cy="78" rx="15" ry="0" fill="#1a1008">
+        <animate attributeName="ry" values="0;16;0" dur="0.15s" begin="blink.begin" fill="freeze"/>
+      </ellipse>
+
+      <!-- Blink trigger: random interval via JS, but here a base animation -->
+      <rect id="blink-trigger" width="0" height="0" opacity="0">
+        <animate id="blink" attributeName="x" from="0" to="0" dur="0.01s"
+                 begin="0s;blink.end+3.2s" fill="freeze"/>
+      </rect>
+
+      <!-- Ear frills -->
+      <path d="M 48 60 Q 30 50 25 55 Q 30 65 45 65 Z" fill="#1a1008"/>
+      <path d="M 152 60 Q 170 50 175 55 Q 170 65 155 65 Z" fill="#1a1008"/>
     </g>
-
-    <!-- Right Wing (behind body) -->
-    <g opacity="0.9">
-      <path d="M 190 120 Q 260 60 250 20 Q 235 50 220 55 Q 250 30 240 8 Q 225 40 210 50 Q 230 15 215 2 Q 208 38 198 55 L 180 100 Z"
-            fill="url(#wingGrad2)" stroke="#5a3a10" stroke-width="1.5"/>
-      <!-- Wing membrane lines -->
-      <path d="M 190 115 Q 230 70 242 18" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
-      <path d="M 188 110 Q 225 65 228 12" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
-      <path d="M 185 105 Q 215 55 212 5" fill="none" stroke="#6a4a18" stroke-width="0.8" opacity="0.5"/>
-    </g>
-
-    <!-- Tail -->
-    <path d="M 130 230 Q 100 260 80 270 Q 60 280 40 275 Q 55 268 45 258 Q 35 248 25 252 L 20 245 Q 35 240 42 250 Q 50 245 60 265 Q 80 258 100 242 Q 118 228 128 225"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="1.5"/>
-    <!-- Tail spines -->
-    <path d="M 80 265 L 75 255 L 85 262" fill="#4a1510" stroke="#3a0a06" stroke-width="0.5"/>
-    <path d="M 60 272 L 52 263 L 64 269" fill="#4a1510" stroke="#3a0a06" stroke-width="0.5"/>
-    <path d="M 42 270 L 33 262 L 45 267" fill="#4a1510" stroke="#3a0a06" stroke-width="0.5"/>
-    <!-- Tail tip (arrow) -->
-    <path d="M 20 245 L 8 240 L 18 235 L 25 244" fill="#6b1510" stroke="#3a0a06" stroke-width="1"/>
-
-    <!-- Body -->
-    <ellipse cx="140" cy="185" rx="52" ry="55" fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="2"/>
-
-    <!-- Belly scales -->
-    <path d="M 122 165 Q 140 158 158 165" fill="none" stroke="url(#bellyGrad)" stroke-width="2" opacity="0.7"/>
-    <path d="M 118 178 Q 140 170 162 178" fill="none" stroke="url(#bellyGrad)" stroke-width="2" opacity="0.7"/>
-    <path d="M 116 191 Q 140 183 164 191" fill="none" stroke="url(#bellyGrad)" stroke-width="2" opacity="0.7"/>
-    <path d="M 118 204 Q 140 196 162 204" fill="none" stroke="url(#bellyGrad)" stroke-width="2" opacity="0.6"/>
-    <path d="M 122 216 Q 140 208 158 216" fill="none" stroke="url(#bellyGrad)" stroke-width="2" opacity="0.5"/>
-
-    <!-- Back spines -->
-    <path d="M 135 132 L 128 118 L 140 128" fill="#6b1a1a" stroke="#3a0a06" stroke-width="0.8"/>
-    <path d="M 142 130 L 138 114 L 148 127" fill="#6b1a1a" stroke="#3a0a06" stroke-width="0.8"/>
-    <path d="M 150 133 L 149 117 L 157 130" fill="#6b1a1a" stroke="#3a0a06" stroke-width="0.8"/>
-
-    <!-- Left Hind Leg -->
-    <path d="M 108 220 Q 95 245 85 260 Q 80 268 88 270 L 100 268 Q 95 262 100 252 Q 105 240 112 225"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="1.5"/>
-    <!-- Claws -->
-    <path d="M 88 270 L 83 274" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 93 270 L 90 275" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 98 269 L 97 274" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-
-    <!-- Right Hind Leg -->
-    <path d="M 172 220 Q 185 245 195 260 Q 200 268 192 270 L 180 268 Q 185 262 180 252 Q 175 240 168 225"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="1.5"/>
-    <!-- Claws -->
-    <path d="M 192 270 L 197 274" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 187 270 L 190 275" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 182 269 L 183 274" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-
-    <!-- Left Front Leg -->
-    <path d="M 105 175 Q 88 195 82 210 Q 78 218 85 220 L 96 218 Q 90 212 94 204 Q 98 195 108 182"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="1.5"/>
-    <path d="M 85 220 L 80 224" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 90 220 L 87 225" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-
-    <!-- Right Front Leg -->
-    <path d="M 175 175 Q 192 195 198 210 Q 202 218 195 220 L 184 218 Q 190 212 186 204 Q 182 195 172 182"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="1.5"/>
-    <path d="M 195 220 L 200 224" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M 190 220 L 193 225" stroke="#3a0a06" stroke-width="1.5" stroke-linecap="round"/>
-
-    <!-- Neck -->
-    <path d="M 120 155 Q 115 130 120 110 Q 128 90 140 80 Q 152 90 160 110 Q 165 130 160 155"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="2"/>
-    <!-- Neck scales -->
-    <path d="M 128 145 Q 140 140 152 145" fill="none" stroke="url(#bellyGrad)" stroke-width="1.5" opacity="0.6"/>
-    <path d="M 130 135 Q 140 130 150 135" fill="none" stroke="url(#bellyGrad)" stroke-width="1.5" opacity="0.6"/>
-    <path d="M 132 125 Q 140 120 148 125" fill="none" stroke="url(#bellyGrad)" stroke-width="1.5" opacity="0.5"/>
-
-    <!-- Head -->
-    <path d="M 115 95 Q 110 75 115 60 Q 125 45 140 42 Q 155 45 165 60 Q 170 75 165 95 Q 155 105 140 108 Q 125 105 115 95 Z"
-          fill="url(#bodyGrad)" stroke="#3a0a06" stroke-width="2"/>
-
-    <!-- Snout -->
-    <path d="M 118 78 Q 110 68 105 62 Q 100 55 105 50 Q 112 48 118 55 Q 122 60 125 68 Z"
-          fill="#7b1a15" stroke="#3a0a06" stroke-width="1.5"/>
-    <path d="M 162 78 Q 170 68 175 62 Q 180 55 175 50 Q 168 48 162 55 Q 158 60 155 68 Z"
-          fill="#7b1a15" stroke="#3a0a06" stroke-width="1.5"/>
-
-    <!-- Nostrils -->
-    <circle cx="110" cy="58" r="3" fill="#2a0505" opacity="0.7"/>
-    <circle cx="170" cy="58" r="3" fill="#2a0505" opacity="0.7"/>
-
-    <!-- Smoke wisps from nostrils -->
-    <path d="M 108 55 Q 102 48 105 40 Q 108 35 104 28" fill="none" stroke="#8a7a6a" stroke-width="1.2" opacity="0.35"/>
-    <path d="M 172 55 Q 178 48 175 40 Q 172 35 176 28" fill="none" stroke="#8a7a6a" stroke-width="1.2" opacity="0.35"/>
-
-    <!-- Eyes -->
-    <ellipse cx="128" cy="72" rx="7" ry="8" fill="url(#eyeGlow)" stroke="#3a0a06" stroke-width="1.5"/>
-    <ellipse cx="152" cy="72" rx="7" ry="8" fill="url(#eyeGlow)" stroke="#3a0a06" stroke-width="1.5"/>
-    <!-- Slit pupils -->
-    <ellipse cx="128" cy="72" rx="2.5" ry="6" fill="#1a0a00"/>
-    <ellipse cx="152" cy="72" rx="2.5" ry="6" fill="#1a0a00"/>
-    <!-- Eye highlight -->
-    <circle cx="131" cy="69" r="1.5" fill="#fff" opacity="0.6"/>
-    <circle cx="155" cy="69" r="1.5" fill="#fff" opacity="0.6"/>
-
-    <!-- Horns -->
-    <path d="M 120 58 Q 112 40 108 25 Q 115 35 120 50" fill="#5a3a10" stroke="#3a2008" stroke-width="1.2"/>
-    <path d="M 160 58 Q 168 40 172 25 Q 165 35 160 50" fill="#5a3a10" stroke="#3a2008" stroke-width="1.2"/>
-
-    <!-- Ear frills -->
-    <path d="M 114 68 Q 102 62 98 68 Q 104 72 114 72" fill="#9b2a20" stroke="#3a0a06" stroke-width="0.8"/>
-    <path d="M 166 68 Q 178 62 182 68 Q 176 72 166 72" fill="#9b2a20" stroke="#3a0a06" stroke-width="0.8"/>
-
-    <!-- Mouth line -->
-    <path d="M 118 88 Q 128 94 140 95 Q 152 94 162 88" fill="none" stroke="#3a0a06" stroke-width="1.2"/>
-
-    <!-- Teeth hints -->
-    <path d="M 122 89 L 124 93 L 126 89" fill="#e8e0d0" stroke="#3a0a06" stroke-width="0.5"/>
-    <path d="M 154 89 L 156 93 L 158 89" fill="#e8e0d0" stroke="#3a0a06" stroke-width="0.5"/>
-
-    <!-- Decorative gold border/filigree around body — manuscript illumination style -->
-    <circle cx="140" cy="155" r="3" fill="#c4943a" opacity="0.5"/>
-    <circle cx="96" cy="190" r="2" fill="#c4943a" opacity="0.4"/>
-    <circle cx="184" cy="190" r="2" fill="#c4943a" opacity="0.4"/>
-
-    <!-- Scale texture dots on body -->
-    <circle cx="125" cy="175" r="1.5" fill="#5a1210" opacity="0.4"/>
-    <circle cx="135" cy="170" r="1.5" fill="#5a1210" opacity="0.4"/>
-    <circle cx="145" cy="172" r="1.5" fill="#5a1210" opacity="0.4"/>
-    <circle cx="155" cy="175" r="1.5" fill="#5a1210" opacity="0.4"/>
-    <circle cx="130" cy="185" r="1.5" fill="#5a1210" opacity="0.3"/>
-    <circle cx="150" cy="185" r="1.5" fill="#5a1210" opacity="0.3"/>
-    <circle cx="120" cy="195" r="1.5" fill="#5a1210" opacity="0.3"/>
-    <circle cx="160" cy="195" r="1.5" fill="#5a1210" opacity="0.3"/>
-    <circle cx="140" cy="200" r="1.5" fill="#5a1210" opacity="0.25"/>
   `
   return svg
 }
+
+export function createBodySVG() {
+  const svg = _svg(110, 90, '0 0 220 180')
+  svg.innerHTML = `
+    <!-- Main body coil -->
+    <path d="M 10 90 Q 10 30 55 15 Q 100 0 140 15 Q 185 35 210 90
+             Q 215 120 185 150 Q 150 175 110 170
+             Q 70 165 40 145 Q 10 125 10 90 Z"
+          fill="#1a1008"/>
+
+    <!-- Wing (left) -->
+    <path d="M 50 70 Q 20 30 5 10 Q 15 25 10 40 Q 5 20 0 5
+             Q 8 22 5 45 Q 3 28 0 18 Q 6 35 10 55 Q 15 50 25 60 L 50 70 Z"
+          fill="#1a1008"/>
+    <!-- Wing spines -->
+    <path d="M 50 70 Q 25 40 8 12" fill="none" stroke="#2a1a08" stroke-width="1.5" opacity="0.3"/>
+    <path d="M 45 65 Q 18 35 3 8" fill="none" stroke="#2a1a08" stroke-width="1" opacity="0.25"/>
+
+    <!-- Wing (right) -->
+    <path d="M 170 70 Q 200 30 215 10 Q 205 25 210 40 Q 215 20 220 5
+             Q 212 22 215 45 Q 217 28 220 18 Q 214 35 210 55 Q 205 50 195 60 L 170 70 Z"
+          fill="#1a1008"/>
+    <path d="M 170 70 Q 195 40 212 12" fill="none" stroke="#2a1a08" stroke-width="1.5" opacity="0.3"/>
+    <path d="M 175 65 Q 202 35 217 8" fill="none" stroke="#2a1a08" stroke-width="1" opacity="0.25"/>
+
+    <!-- Belly detail -->
+    <path d="M 80 85 Q 110 75 140 85" fill="none" stroke="#2a2018" stroke-width="2" opacity="0.2"/>
+    <path d="M 75 100 Q 110 90 145 100" fill="none" stroke="#2a2018" stroke-width="2" opacity="0.2"/>
+    <path d="M 78 115 Q 110 105 142 115" fill="none" stroke="#2a2018" stroke-width="2" opacity="0.2"/>
+
+    <!-- Legs -->
+    <path d="M 55 140 Q 45 160 40 172 Q 38 178 44 180 L 56 178 Q 50 172 52 164 Q 55 155 60 145"
+          fill="#1a1008"/>
+    <path d="M 44 180 L 38 184" stroke="#1a1008" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 50 179 L 47 184" stroke="#1a1008" stroke-width="3" stroke-linecap="round"/>
+
+    <path d="M 165 140 Q 175 160 180 172 Q 182 178 176 180 L 164 178 Q 170 172 168 164 Q 165 155 160 145"
+          fill="#1a1008"/>
+    <path d="M 176 180 L 182 184" stroke="#1a1008" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 170 179 L 173 184" stroke="#1a1008" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Scale dots -->
+    <circle cx="90" cy="60" r="2" fill="#0f0a04" opacity="0.3"/>
+    <circle cx="110" cy="55" r="2" fill="#0f0a04" opacity="0.3"/>
+    <circle cx="130" cy="60" r="2" fill="#0f0a04" opacity="0.3"/>
+    <circle cx="100" cy="130" r="2.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="120" cy="128" r="2.5" fill="#0f0a04" opacity="0.2"/>
+  `
+  return svg
+}
+
+export function createTailSVG() {
+  const svg = _svg(130, 60, '0 0 260 120')
+  svg.innerHTML = `
+    <!-- Tail body — long coiling shape -->
+    <path d="M 10 60 Q 30 25 65 20 Q 100 15 130 30
+             Q 160 45 185 40 Q 210 35 235 20 Q 248 12 255 5
+             L 260 15 Q 250 25 235 35 Q 210 50 185 55
+             Q 160 60 130 50 Q 100 40 70 45
+             Q 40 50 20 70 Q 12 78 10 60 Z"
+          fill="#1a1008"/>
+
+    <!-- Tail spines -->
+    <path d="M 60 22 L 55 8 L 65 18 Z" fill="#1a1008"/>
+    <path d="M 90 18 L 88 4 L 95 15 Z" fill="#1a1008"/>
+    <path d="M 120 25 L 120 10 L 126 22 Z" fill="#1a1008"/>
+    <path d="M 150 38 L 152 24 L 156 35 Z" fill="#1a1008"/>
+    <path d="M 180 38 L 184 24 L 186 36 Z" fill="#1a1008"/>
+    <path d="M 210 30 L 215 18 L 216 28 Z" fill="#1a1008"/>
+    <path d="M 235 22 L 240 10 L 240 20 Z" fill="#1a1008"/>
+
+    <!-- Tail tip — arrow/spade shape -->
+    <path d="M 250 10 Q 260 0 265 10 Q 270 20 260 18 L 255 12 Z" fill="#1a1008"/>
+    <path d="M 252 12 Q 255 2 262 8" fill="none" stroke="#0f0a04" stroke-width="1" opacity="0.3"/>
+
+    <!-- Belly line -->
+    <path d="M 25 62 Q 60 48 100 42 Q 140 48 170 52" fill="none" stroke="#2a2018" stroke-width="1.5" opacity="0.15"/>
+
+    <!-- Scale hints -->
+    <circle cx="50" cy="40" r="1.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="80" cy="32" r="1.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="110" cy="35" r="1.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="145" cy="45" r="1.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="175" cy="48" r="1.5" fill="#0f0a04" opacity="0.2"/>
+    <circle cx="200" cy="40" r="1.5" fill="#0f0a04" opacity="0.15"/>
+  `
+  return svg
+}
+
+function _svg(w, h, viewBox) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', viewBox)
+  svg.setAttribute('width', String(w))
+  svg.setAttribute('height', String(h))
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  return svg
+}
+
+// --- Blink controller ---
+// Randomized blinking: the dragon blinks at irregular intervals like a real animal
+
+export function startBlinking(headEl) {
+  const eyelids = headEl.querySelectorAll('.dragon-eyelid-l, .dragon-eyelid-r')
+  if (!eyelids.length) return
+
+  function blink() {
+    eyelids.forEach(lid => {
+      // Reset and replay animation
+      const anim = lid.querySelector('animate')
+      if (anim) {
+        anim.beginElement()
+      } else {
+        // Fallback: CSS-based blink
+        lid.setAttribute('ry', '16')
+        setTimeout(() => lid.setAttribute('ry', '0'), 150)
+      }
+    })
+
+    // Double-blink 30% of the time
+    if (Math.random() < 0.3) {
+      setTimeout(() => {
+        eyelids.forEach(lid => {
+          const anim = lid.querySelector('animate')
+          if (anim) anim.beginElement()
+          else {
+            lid.setAttribute('ry', '16')
+            setTimeout(() => lid.setAttribute('ry', '0'), 120)
+          }
+        })
+      }, 250)
+    }
+
+    // Next blink: 2–6 seconds, like a real animal
+    const next = 2000 + Math.random() * 4000
+    setTimeout(blink, next)
+  }
+
+  // First blink after 1–3 seconds
+  setTimeout(blink, 1000 + Math.random() * 2000)
+}
+
+// Segment dimensions for text displacement calculations
+export const SEGMENT_DIMS = [
+  { w: 120, h: 120 }, // head
+  { w: 110, h: 90 },  // body
+  { w: 130, h: 60 },  // tail
+]
