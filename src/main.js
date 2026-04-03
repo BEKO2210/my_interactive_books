@@ -4,9 +4,15 @@ import {
   layoutNextLine,
 } from '@chenglou/pretext'
 import { storyBlocks } from './story.js'
-import { createDragonSVG, DRAGON_WIDTH, DRAGON_HEIGHT } from './dragon.js'
+import {
+  createHeadSVG, createBodySVG, createTailSVG,
+  startBlinking, SEGMENT_DIMS,
+} from './dragon.js'
 
-// --- Font definitions ---
+// =============================================
+// Font definitions
+// =============================================
+
 const BODY_FONT = '18px "IM Fell English", "Palatino Linotype", "Book Antiqua", Palatino, serif'
 const BODY_ITALIC_FONT = 'italic 18px "IM Fell DW Pica", "Palatino Linotype", serif'
 const TITLE_FONT = '32px "Uncial Antiqua", serif'
@@ -17,27 +23,39 @@ const LIST_FONT = '16px "IM Fell English", "Palatino Linotype", serif'
 const WARNING_FONT = '17px "IM Fell Great Primer", "Palatino Linotype", serif'
 const COLOPHON_FONT = 'italic 15px "IM Fell DW Pica", serif'
 
-const BODY_LINE_HEIGHT = 31
-const TITLE_LINE_HEIGHT = 42
-const SUBTITLE_LINE_HEIGHT = 24
-const HIGHLIGHT_LINE_HEIGHT = 32
-const NOTE_LINE_HEIGHT = 26
-const LIST_LINE_HEIGHT = 28
-const WARNING_LINE_HEIGHT = 30
-const COLOPHON_LINE_HEIGHT = 26
+const BODY_LH = 31
+const TITLE_LH = 42
+const SUBTITLE_LH = 24
+const HIGHLIGHT_LH = 32
+const NOTE_LH = 26
+const LIST_LH = 28
+const WARNING_LH = 30
+const COLOPHON_LH = 26
 
-// --- Dragon state ---
-const dragon = {
-  x: 0,
-  y: 0,
-  dragging: false,
+// =============================================
+// Dragon state — 3 segments with physics
+// =============================================
+
+const FOLLOW_SPEED = 0.12       // how fast segments follow (0–1)
+const SEGMENT_SPACING = 8       // gap between segments in px
+const DRAGON_PAD = 14           // text avoidance padding around each segment
+
+const segments = [
+  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[0] },
+  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[1] },
+  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[2] },
+]
+
+const dragState = {
+  active: false,
   offsetX: 0,
   offsetY: 0,
-  el: null,
-  padding: 16, // space around dragon where text avoids
 }
 
-// --- Parchment texture ---
+// =============================================
+// Parchment texture
+// =============================================
+
 function generateParchmentTexture(canvas) {
   const rect = canvas.parentElement.getBoundingClientRect()
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -49,95 +67,80 @@ function generateParchmentTexture(canvas) {
   ctx.clearRect(0, 0, w, h)
 
   const imageData = ctx.createImageData(w, h)
-  const data = imageData.data
-  for (let i = 0; i < data.length; i += 4) {
-    const noise = Math.random() * 55
-    data[i] = noise
-    data[i + 1] = noise * 0.8
-    data[i + 2] = noise * 0.5
-    data[i + 3] = Math.random() * 25
+  const d = imageData.data
+  for (let i = 0; i < d.length; i += 4) {
+    const n = Math.random() * 55
+    d[i] = n; d[i+1] = n * 0.8; d[i+2] = n * 0.5; d[i+3] = Math.random() * 25
   }
   ctx.putImageData(imageData, 0, 0)
 
   for (let i = 0; i < 20; i++) {
-    const x = Math.random() * w
-    const y = Math.random() * h
-    const r = Math.random() * 40 + 5
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, r)
-    gradient.addColorStop(0, `rgba(100, 70, 30, ${Math.random() * 0.1})`)
-    gradient.addColorStop(1, 'transparent')
-    ctx.fillStyle = gradient
+    const x = Math.random() * w, y = Math.random() * h, r = Math.random() * 40 + 5
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, `rgba(100,70,30,${Math.random()*0.1})`)
+    g.addColorStop(1, 'transparent')
+    ctx.fillStyle = g
     ctx.fillRect(x - r, y - r, r * 2, r * 2)
   }
 }
 
-// --- Pretext-powered line-by-line layout with dragon obstacle ---
+// =============================================
+// Pretext text layout with dragon obstacles
+// =============================================
 
-// Check if a horizontal line at yTop..yBottom overlaps the dragon circle
-// Returns the available width intervals (left side or right side of dragon)
-function getLineAvailableWidth(lineTop, lineBottom, blockLeft, blockWidth, dragonRect) {
-  if (!dragonRect) return [{ left: blockLeft, width: blockWidth }]
-
-  const dTop = dragonRect.top - dragon.padding
-  const dBottom = dragonRect.bottom + dragon.padding
-  const dLeft = dragonRect.left - dragon.padding
-  const dRight = dragonRect.right + dragon.padding
-
-  // No vertical overlap
-  if (lineBottom <= dTop || lineTop >= dBottom) {
-    return [{ left: blockLeft, width: blockWidth }]
-  }
-
-  const blockRight = blockLeft + blockWidth
-
-  // No horizontal overlap
-  if (dLeft >= blockRight || dRight <= blockLeft) {
-    return [{ left: blockLeft, width: blockWidth }]
-  }
-
-  // Dragon is in the way — figure out which side has more space
-  const leftSpace = Math.max(0, dLeft - blockLeft)
-  const rightSpace = Math.max(0, blockRight - dRight)
-
-  if (leftSpace >= rightSpace && leftSpace > 60) {
-    return [{ left: blockLeft, width: leftSpace }]
-  } else if (rightSpace > 60) {
-    return [{ left: dRight, width: rightSpace }]
-  } else if (leftSpace > 30) {
-    return [{ left: blockLeft, width: leftSpace }]
-  } else {
-    // Dragon covers nearly all — push text below
-    return []
-  }
+function getObstacleRects() {
+  const scrollEl = document.getElementById('scroll-container')
+  const scrollTop = scrollEl.scrollTop
+  return segments.map(s => ({
+    left:   s.x - DRAGON_PAD,
+    top:    s.y + scrollTop - DRAGON_PAD,
+    right:  s.x + s.dim.w + DRAGON_PAD,
+    bottom: s.y + s.dim.h + scrollTop + DRAGON_PAD,
+  }))
 }
 
-// Lay out text using Pretext's layoutNextLine, flowing around the dragon
-function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, dragonRect) {
+function lineAvailableWidth(lineTop, lineBot, blockLeft, blockWidth, obstacles) {
+  let left = blockLeft
+  let right = blockLeft + blockWidth
+
+  for (const ob of obstacles) {
+    if (lineBot <= ob.top || lineTop >= ob.bottom) continue
+    if (ob.right <= left || ob.left >= right) continue
+
+    // Obstacle overlaps this line — choose larger side
+    const leftSpace = Math.max(0, ob.left - left)
+    const rightSpace = Math.max(0, right - ob.right)
+
+    if (leftSpace >= rightSpace && leftSpace > 50) {
+      return { x: left, w: leftSpace }
+    } else if (rightSpace > 50) {
+      return { x: ob.right, w: rightSpace }
+    } else {
+      return null // blocked
+    }
+  }
+
+  return { x: left, w: right - left }
+}
+
+function layoutAroundObstacles(text, font, lineHeight, blockTop, blockLeft, blockWidth, obstacles) {
   const prepared = prepareWithSegments(text, font)
   const lines = []
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = blockTop
 
   for (let safety = 0; safety < 500; safety++) {
-    const intervals = getLineAvailableWidth(y, y + lineHeight, blockLeft, blockWidth, dragonRect)
+    const avail = lineAvailableWidth(y, y + lineHeight, blockLeft, blockWidth, obstacles)
 
-    if (intervals.length === 0) {
-      // Skip this line height — dragon blocks it entirely
+    if (!avail) {
       y += lineHeight
       continue
     }
 
-    const interval = intervals[0]
-    const line = layoutNextLine(prepared, cursor, interval.width)
+    const line = layoutNextLine(prepared, cursor, avail.w)
     if (line === null) break
 
-    lines.push({
-      text: line.text,
-      width: line.width,
-      x: interval.left,
-      y: y,
-    })
-
+    lines.push({ text: line.text, width: line.width, x: avail.x, y })
     cursor = line.end
     y += lineHeight
   }
@@ -145,92 +148,118 @@ function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWi
   return { lines, height: y - blockTop }
 }
 
-// --- Collect all rendered blocks for relayout ---
-let renderedBlocks = []
+// =============================================
+// Block registry for relayout
+// =============================================
+
+let registeredBlocks = []
 let manuscriptEl = null
 let contentWidth = 0
 
 function getContentWidth() {
-  const parchment = document.getElementById('parchment')
-  const style = getComputedStyle(parchment)
-  return parchment.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  const p = document.getElementById('parchment')
+  const s = getComputedStyle(p)
+  return p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
 }
 
-function getDragonRect() {
-  if (!dragon.el || !manuscriptEl) return null
-  const mRect = manuscriptEl.getBoundingClientRect()
-  return {
-    left: dragon.x,
-    top: dragon.y,
-    right: dragon.x + DRAGON_WIDTH,
-    bottom: dragon.y + DRAGON_HEIGHT,
-    // relative to manuscript
-    relLeft: dragon.x - mRect.left + manuscriptEl.scrollLeft,
-    relTop: dragon.y - mRect.top + manuscriptEl.scrollTop,
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, obstacles) {
+  container.innerHTML = ''
+
+  if (obstacles && obstacles.length) {
+    const cRect = container.getBoundingClientRect()
+    const scrollTop = document.getElementById('scroll-container').scrollTop
+    const blockTop = cRect.top + scrollTop
+    const blockLeft = cRect.left
+
+    const result = layoutAroundObstacles(text, font, lineHeight, blockTop, blockLeft, maxWidth, obstacles)
+    for (const line of result.lines) {
+      const d = document.createElement('div')
+      d.className = 'pt-line'
+      d.style.font = font
+      d.style.lineHeight = lineHeight + 'px'
+      const offset = line.x - blockLeft
+      if (Math.abs(offset) > 1) d.style.marginLeft = offset + 'px'
+      d.textContent = line.text
+      container.appendChild(d)
+    }
+  } else {
+    const prepared = prepareWithSegments(text, font)
+    const result = layoutWithLines(prepared, maxWidth, lineHeight)
+    for (const line of result.lines) {
+      const d = document.createElement('div')
+      d.className = 'pt-line'
+      d.style.font = font
+      d.style.lineHeight = lineHeight + 'px'
+      d.textContent = line.text
+      container.appendChild(d)
+    }
   }
 }
 
-// --- Rendering ---
+function relayoutAll() {
+  const obstacles = getObstacleRects()
+  for (const b of registeredBlocks) {
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, obstacles)
+  }
+}
+
+let relayoutRAF = null
+function scheduleRelayout() {
+  if (relayoutRAF) return
+  relayoutRAF = requestAnimationFrame(() => {
+    relayoutRAF = null
+    relayoutAll()
+  })
+}
+
+// =============================================
+// Rendering story blocks
+// =============================================
 
 function render() {
   manuscriptEl = document.getElementById('manuscript')
   manuscriptEl.innerHTML = ''
-  renderedBlocks = []
+  registeredBlocks = []
   contentWidth = getContentWidth()
 
-  const narrowWidth = Math.min(contentWidth * 0.78, contentWidth - 40)
-  const shortWidth = Math.min(contentWidth * 0.62, contentWidth - 80)
+  const narrowW = Math.min(contentWidth * 0.78, contentWidth - 40)
+  const shortW = Math.min(contentWidth * 0.62, contentWidth - 80)
 
   for (const block of storyBlocks) {
     switch (block.type) {
-      case 'title': renderTitle(block); break
-      case 'subtitle': renderSubtitle(block); break
+      case 'title':     renderTitle(block); break
+      case 'subtitle':  renderSubtitle(block); break
       case 'separator': renderSeparator(); break
-      case 'body': renderBody(block, narrowWidth, shortWidth); break
+      case 'body':      renderBody(block, narrowW, shortW); break
       case 'highlight': renderHighlight(block); break
-      case 'quote': renderQuote(block); break
-      case 'note': renderNote(block); break
-      case 'list': renderList(block); break
-      case 'warning': renderWarning(block); break
-      case 'colophon': renderColophon(block); break
+      case 'quote':     renderQuote(block); break
+      case 'note':      renderNote(block); break
+      case 'list':      renderList(block); break
+      case 'warning':   renderWarning(block); break
+      case 'colophon':  renderColophon(block); break
     }
   }
 
-  // After initial render, do a relayout pass with dragon position
-  requestAnimationFrame(() => relayoutWithDragon())
+  requestAnimationFrame(() => relayoutAll())
 }
 
-function registerBlock(el, blockData) {
-  renderedBlocks.push({ el, ...blockData })
+function registerBlock(el, data) {
+  registeredBlocks.push({ el, ...data })
 }
 
 function renderTitle(block) {
-  const result = layoutWithLines(
-    prepareWithSegments(block.text, TITLE_FONT),
-    contentWidth, TITLE_LINE_HEIGHT
-  )
+  const res = layoutWithLines(prepareWithSegments(block.text, TITLE_FONT), contentWidth, TITLE_LH)
   const el = document.createElement('div')
   el.className = 'ms-title'
-  result.lines.forEach(line => {
-    const d = document.createElement('div')
-    d.textContent = line.text
-    el.appendChild(d)
-  })
+  for (const l of res.lines) { const d = document.createElement('div'); d.textContent = l.text; el.appendChild(d) }
   manuscriptEl.appendChild(el)
 }
 
 function renderSubtitle(block) {
-  const result = layoutWithLines(
-    prepareWithSegments(block.text, SUBTITLE_FONT, { whiteSpace: 'pre-wrap' }),
-    contentWidth * 0.82, SUBTITLE_LINE_HEIGHT
-  )
+  const res = layoutWithLines(prepareWithSegments(block.text, SUBTITLE_FONT, { whiteSpace: 'pre-wrap' }), contentWidth * 0.82, SUBTITLE_LH)
   const el = document.createElement('div')
   el.className = 'ms-subtitle'
-  result.lines.forEach(line => {
-    const d = document.createElement('div')
-    d.textContent = line.text
-    el.appendChild(d)
-  })
+  for (const l of res.lines) { const d = document.createElement('div'); d.textContent = l.text; el.appendChild(d) }
   manuscriptEl.appendChild(el)
 }
 
@@ -241,180 +270,112 @@ function renderSeparator() {
   manuscriptEl.appendChild(el)
 }
 
-function renderBody(block, narrowWidth, shortWidth) {
-  let maxWidth = contentWidth
-  let cssClass = 'ms-paragraph'
-
-  if (block.width === 'narrow') { maxWidth = narrowWidth; cssClass = 'ms-paragraph-narrow' }
-  else if (block.width === 'short') { maxWidth = shortWidth; cssClass = 'ms-paragraph-short' }
+function renderBody(block, narrowW, shortW) {
+  let maxW = contentWidth, cls = 'ms-paragraph'
+  if (block.width === 'narrow') { maxW = narrowW; cls = 'ms-paragraph-narrow' }
+  else if (block.width === 'short') { maxW = shortW; cls = 'ms-paragraph-short' }
 
   const wrapper = document.createElement('div')
-  wrapper.className = cssClass
+  wrapper.className = cls
 
   if (block.initial) {
-    const initialEl = document.createElement('span')
-    initialEl.className = 'ms-initial'
-    initialEl.textContent = block.initial
-    wrapper.appendChild(initialEl)
+    const ini = document.createElement('span')
+    ini.className = 'ms-initial'
+    ini.textContent = block.initial
+    wrapper.appendChild(ini)
   }
 
-  // Create a container for Pretext-laid-out lines
-  const linesContainer = document.createElement('div')
-  linesContainer.className = 'ms-body pt-lines-container'
-  wrapper.appendChild(linesContainer)
+  const lc = document.createElement('div')
+  lc.className = 'ms-body pt-lines-container'
+  wrapper.appendChild(lc)
 
   if (block.marginal) {
-    const marginal = document.createElement('div')
-    marginal.className = block.marginal.side === 'left' ? 'ms-marginal-left' : 'ms-marginal'
-    marginal.textContent = block.marginal.text
-    wrapper.appendChild(marginal)
+    const m = document.createElement('div')
+    m.className = block.marginal.side === 'left' ? 'ms-marginal-left' : 'ms-marginal'
+    m.textContent = block.marginal.text
+    wrapper.appendChild(m)
   }
 
   manuscriptEl.appendChild(wrapper)
-
-  // Register for relayout
-  registerBlock(linesContainer, {
-    type: 'body',
-    text: block.text,
-    font: BODY_FONT,
-    lineHeight: BODY_LINE_HEIGHT,
-    maxWidth: maxWidth,
-  })
-
-  // Initial layout without dragon
-  layoutBlockLines(linesContainer, block.text, BODY_FONT, BODY_LINE_HEIGHT, maxWidth, null)
+  registerBlock(lc, { text: block.text, font: BODY_FONT, lineHeight: BODY_LH, maxWidth: maxW })
+  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null)
 }
 
 function renderHighlight(block) {
   const el = document.createElement('div')
   el.className = 'ms-highlight-line'
-
-  const linesContainer = document.createElement('div')
-  linesContainer.className = 'pt-lines-container'
-  el.appendChild(linesContainer)
-
+  const lc = document.createElement('div')
+  lc.className = 'pt-lines-container'
+  el.appendChild(lc)
   manuscriptEl.appendChild(el)
-
-  registerBlock(linesContainer, {
-    type: 'highlight',
-    text: block.text,
-    font: HIGHLIGHT_FONT,
-    lineHeight: HIGHLIGHT_LINE_HEIGHT,
-    maxWidth: contentWidth * 0.88,
-  })
-
-  layoutBlockLines(linesContainer, block.text, HIGHLIGHT_FONT, HIGHLIGHT_LINE_HEIGHT, contentWidth * 0.88, null)
+  const mw = contentWidth * 0.88
+  registerBlock(lc, { text: block.text, font: HIGHLIGHT_FONT, lineHeight: HIGHLIGHT_LH, maxWidth: mw })
+  layoutBlockLines(lc, block.text, HIGHLIGHT_FONT, HIGHLIGHT_LH, mw, null)
 }
 
 function renderQuote(block) {
   const el = document.createElement('div')
   el.className = 'ms-quote'
-
-  const linesContainer = document.createElement('div')
-  linesContainer.className = 'pt-lines-container'
-  el.appendChild(linesContainer)
-
+  const lc = document.createElement('div')
+  lc.className = 'pt-lines-container'
+  el.appendChild(lc)
   if (block.attribution) {
-    const attr = document.createElement('div')
-    attr.className = 'ms-quote-attribution'
-    attr.textContent = block.attribution
-    el.appendChild(attr)
+    const a = document.createElement('div')
+    a.className = 'ms-quote-attribution'
+    a.textContent = block.attribution
+    el.appendChild(a)
   }
-
   manuscriptEl.appendChild(el)
-
-  const quoteWidth = contentWidth - 110
-  registerBlock(linesContainer, {
-    type: 'quote',
-    text: block.text,
-    font: BODY_ITALIC_FONT,
-    lineHeight: BODY_LINE_HEIGHT,
-    maxWidth: quoteWidth,
-  })
-
-  layoutBlockLines(linesContainer, block.text, BODY_ITALIC_FONT, BODY_LINE_HEIGHT, quoteWidth, null)
+  const mw = contentWidth - 110
+  registerBlock(lc, { text: block.text, font: BODY_ITALIC_FONT, lineHeight: BODY_LH, maxWidth: mw })
+  layoutBlockLines(lc, block.text, BODY_ITALIC_FONT, BODY_LH, mw, null)
 }
 
 function renderNote(block) {
   const el = document.createElement('div')
   el.className = 'ms-note'
-
-  const linesContainer = document.createElement('div')
-  linesContainer.className = 'pt-lines-container'
-  el.appendChild(linesContainer)
-
+  const lc = document.createElement('div')
+  lc.className = 'pt-lines-container'
+  el.appendChild(lc)
   manuscriptEl.appendChild(el)
-
-  const noteWidth = contentWidth - 100
-  registerBlock(linesContainer, {
-    type: 'note',
-    text: block.text,
-    font: NOTE_FONT,
-    lineHeight: NOTE_LINE_HEIGHT,
-    maxWidth: noteWidth,
-  })
-
-  layoutBlockLines(linesContainer, block.text, NOTE_FONT, NOTE_LINE_HEIGHT, noteWidth, null)
+  const mw = contentWidth - 100
+  registerBlock(lc, { text: block.text, font: NOTE_FONT, lineHeight: NOTE_LH, maxWidth: mw })
+  layoutBlockLines(lc, block.text, NOTE_FONT, NOTE_LH, mw, null)
 }
 
 function renderList(block) {
   const el = document.createElement('div')
   el.className = 'ms-list'
-
-  block.items.forEach(item => {
+  for (const item of block.items) {
     const li = document.createElement('div')
     li.className = 'ms-list-item'
-
-    const linesContainer = document.createElement('div')
-    linesContainer.className = 'pt-lines-container'
-    li.appendChild(linesContainer)
+    const lc = document.createElement('div')
+    lc.className = 'pt-lines-container'
+    li.appendChild(lc)
     el.appendChild(li)
-
-    const listWidth = contentWidth - 70
-    registerBlock(linesContainer, {
-      type: 'list-item',
-      text: item,
-      font: LIST_FONT,
-      lineHeight: LIST_LINE_HEIGHT,
-      maxWidth: listWidth,
-    })
-
-    layoutBlockLines(linesContainer, item, LIST_FONT, LIST_LINE_HEIGHT, listWidth, null)
-  })
-
+    const mw = contentWidth - 70
+    registerBlock(lc, { text: item, font: LIST_FONT, lineHeight: LIST_LH, maxWidth: mw })
+    layoutBlockLines(lc, item, LIST_FONT, LIST_LH, mw, null)
+  }
   manuscriptEl.appendChild(el)
 }
 
 function renderWarning(block) {
   const el = document.createElement('div')
   el.className = 'ms-warning'
-
   const parts = block.text.split('\n\n')
   if (parts.length > 1) {
-    const header = document.createElement('div')
-    header.style.fontWeight = '700'
-    header.style.letterSpacing = '3px'
-    header.style.marginBottom = '12px'
-    header.style.fontSize = '1.1em'
-    header.textContent = parts[0]
-    el.appendChild(header)
-
-    const linesContainer = document.createElement('div')
-    linesContainer.className = 'pt-lines-container'
-    el.appendChild(linesContainer)
-
+    const hdr = document.createElement('div')
+    hdr.style.cssText = 'font-weight:700;letter-spacing:3px;margin-bottom:12px;font-size:1.1em'
+    hdr.textContent = parts[0]
+    el.appendChild(hdr)
+    const lc = document.createElement('div')
+    lc.className = 'pt-lines-container'
+    el.appendChild(lc)
     manuscriptEl.appendChild(el)
-
-    const warnWidth = contentWidth - 80
-    registerBlock(linesContainer, {
-      type: 'warning',
-      text: parts[1],
-      font: WARNING_FONT,
-      lineHeight: WARNING_LINE_HEIGHT,
-      maxWidth: warnWidth,
-    })
-
-    layoutBlockLines(linesContainer, parts[1], WARNING_FONT, WARNING_LINE_HEIGHT, warnWidth, null)
+    const mw = contentWidth - 80
+    registerBlock(lc, { text: parts[1], font: WARNING_FONT, lineHeight: WARNING_LH, maxWidth: mw })
+    layoutBlockLines(lc, parts[1], WARNING_FONT, WARNING_LH, mw, null)
   } else {
     el.textContent = block.text
     manuscriptEl.appendChild(el)
@@ -424,179 +385,147 @@ function renderWarning(block) {
 function renderColophon(block) {
   const el = document.createElement('div')
   el.className = 'ms-colophon'
-
-  const result = layoutWithLines(
-    prepareWithSegments(block.text, COLOPHON_FONT, { whiteSpace: 'pre-wrap' }),
-    contentWidth * 0.72, COLOPHON_LINE_HEIGHT
-  )
-  result.lines.forEach(line => {
-    const d = document.createElement('div')
-    d.textContent = line.text
-    el.appendChild(d)
-  })
-
+  const res = layoutWithLines(prepareWithSegments(block.text, COLOPHON_FONT, { whiteSpace: 'pre-wrap' }), contentWidth * 0.72, COLOPHON_LH)
+  for (const l of res.lines) { const d = document.createElement('div'); d.textContent = l.text; el.appendChild(d) }
   manuscriptEl.appendChild(el)
 }
 
-// --- Layout lines into a container, optionally flowing around dragon ---
-
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, dragonRect) {
-  container.innerHTML = ''
-
-  if (dragonRect) {
-    const cRect = container.getBoundingClientRect()
-    const scrollContainer = document.getElementById('scroll-container')
-    const scrollTop = scrollContainer.scrollTop
-    const blockTop = cRect.top + scrollTop
-    const blockLeft = cRect.left
-
-    const result = layoutAroundDragon(
-      text, font, lineHeight,
-      blockTop, blockLeft, maxWidth,
-      {
-        left: dragonRect.left,
-        top: dragonRect.top + scrollTop,
-        right: dragonRect.right,
-        bottom: dragonRect.bottom + scrollTop,
-      }
-    )
-
-    result.lines.forEach(line => {
-      const d = document.createElement('div')
-      d.className = 'pt-line'
-      d.style.font = font
-      d.style.lineHeight = lineHeight + 'px'
-      // Offset from block position
-      const offsetX = line.x - blockLeft
-      if (Math.abs(offsetX) > 1) {
-        d.style.marginLeft = offsetX + 'px'
-      }
-      d.textContent = line.text
-      container.appendChild(d)
-    })
-  } else {
-    // Standard layout without dragon
-    const prepared = prepareWithSegments(text, font)
-    const result = layoutWithLines(prepared, maxWidth, lineHeight)
-    result.lines.forEach(line => {
-      const d = document.createElement('div')
-      d.className = 'pt-line'
-      d.style.font = font
-      d.style.lineHeight = lineHeight + 'px'
-      d.textContent = line.text
-      container.appendChild(d)
-    })
-  }
-}
-
-// --- Relayout all registered blocks with current dragon position ---
-
-let relayoutRAF = null
-
-function relayoutWithDragon() {
-  const dragonRect = dragon.el ? dragon.el.getBoundingClientRect() : null
-
-  for (const block of renderedBlocks) {
-    layoutBlockLines(
-      block.el, block.text, block.font,
-      block.lineHeight, block.maxWidth,
-      dragonRect
-    )
-  }
-}
-
-function scheduleRelayout() {
-  if (relayoutRAF) return
-  relayoutRAF = requestAnimationFrame(() => {
-    relayoutRAF = null
-    relayoutWithDragon()
-  })
-}
-
-// --- Dragon drag handling (mobile-first: touch + mouse) ---
+// =============================================
+// Dragon: init, drag, physics
+// =============================================
 
 function initDragon() {
   const scrollContainer = document.getElementById('scroll-container')
   const parchment = document.getElementById('parchment')
-
-  const dragonEl = document.createElement('div')
-  dragonEl.id = 'dragon'
-  dragonEl.setAttribute('role', 'img')
-  dragonEl.setAttribute('aria-label', 'Mittelalterlicher Drache — ziehe mich über den Text')
-  dragonEl.appendChild(createDragonSVG())
-  document.body.appendChild(dragonEl)
-  dragon.el = dragonEl
-
-  // Position dragon initially at top-right of parchment
   const pRect = parchment.getBoundingClientRect()
-  dragon.x = pRect.right - DRAGON_WIDTH - 30
-  dragon.y = pRect.top + 60
-  updateDragonPosition()
 
-  // --- Touch events (primary for mobile) ---
-  dragonEl.addEventListener('touchstart', (e) => {
+  // Create the 3 segment elements
+  const creators = [createHeadSVG, createBodySVG, createTailSVG]
+  const classes = ['dragon-head', 'dragon-body', 'dragon-tail']
+
+  for (let i = 0; i < 3; i++) {
+    const el = document.createElement('div')
+    el.className = `dragon-segment ${classes[i]}`
+    el.appendChild(creators[i]())
+    document.body.appendChild(el)
+    segments[i].el = el
+  }
+
+  // Initial position: stacked vertically at top-right
+  const startX = pRect.right - 160
+  let startY = pRect.top + 40
+  for (let i = 0; i < 3; i++) {
+    segments[i].x = segments[i].targetX = startX
+    segments[i].y = segments[i].targetY = startY
+    updateSegmentPos(i)
+    startY += segments[i].dim.h + SEGMENT_SPACING
+  }
+
+  // Start blinking
+  startBlinking(segments[0].el)
+
+  // --- Touch drag (mobile-first) ---
+  segments[0].el.addEventListener('touchstart', (e) => {
     e.preventDefault()
-    const touch = e.touches[0]
-    dragon.dragging = true
-    dragon.offsetX = touch.clientX - dragon.x
-    dragon.offsetY = touch.clientY - dragon.y
-    dragonEl.classList.add('dragging')
+    const t = e.touches[0]
+    dragState.active = true
+    dragState.offsetX = t.clientX - segments[0].x
+    dragState.offsetY = t.clientY - segments[0].y
+    segments[0].el.classList.add('dragging')
   }, { passive: false })
 
   document.addEventListener('touchmove', (e) => {
-    if (!dragon.dragging) return
+    if (!dragState.active) return
     e.preventDefault()
-    const touch = e.touches[0]
-    dragon.x = touch.clientX - dragon.offsetX
-    dragon.y = touch.clientY - dragon.offsetY
-    updateDragonPosition()
+    const t = e.touches[0]
+    segments[0].targetX = t.clientX - dragState.offsetX
+    segments[0].targetY = t.clientY - dragState.offsetY
+    segments[0].x = segments[0].targetX
+    segments[0].y = segments[0].targetY
+    updateSegmentPos(0)
     scheduleRelayout()
   }, { passive: false })
 
   document.addEventListener('touchend', () => {
-    if (!dragon.dragging) return
-    dragon.dragging = false
-    dragonEl.classList.remove('dragging')
-    scheduleRelayout()
+    if (!dragState.active) return
+    dragState.active = false
+    segments[0].el.classList.remove('dragging')
   })
 
-  // --- Mouse events ---
-  dragonEl.addEventListener('mousedown', (e) => {
+  // --- Mouse drag ---
+  segments[0].el.addEventListener('mousedown', (e) => {
     e.preventDefault()
-    dragon.dragging = true
-    dragon.offsetX = e.clientX - dragon.x
-    dragon.offsetY = e.clientY - dragon.y
-    dragonEl.classList.add('dragging')
+    dragState.active = true
+    dragState.offsetX = e.clientX - segments[0].x
+    dragState.offsetY = e.clientY - segments[0].y
+    segments[0].el.classList.add('dragging')
   })
 
   document.addEventListener('mousemove', (e) => {
-    if (!dragon.dragging) return
-    dragon.x = e.clientX - dragon.offsetX
-    dragon.y = e.clientY - dragon.offsetY
-    updateDragonPosition()
+    if (!dragState.active) return
+    segments[0].targetX = e.clientX - dragState.offsetX
+    segments[0].targetY = e.clientY - dragState.offsetY
+    segments[0].x = segments[0].targetX
+    segments[0].y = segments[0].targetY
+    updateSegmentPos(0)
     scheduleRelayout()
   })
 
   document.addEventListener('mouseup', () => {
-    if (!dragon.dragging) return
-    dragon.dragging = false
-    dragonEl.classList.remove('dragging')
-    scheduleRelayout()
+    if (!dragState.active) return
+    dragState.active = false
+    segments[0].el.classList.remove('dragging')
   })
 
-  // Keep dragon position updated on scroll
-  scrollContainer.addEventListener('scroll', () => {
-    if (!dragon.dragging) {
-      scheduleRelayout()
+  // Relayout on scroll
+  scrollContainer.addEventListener('scroll', () => scheduleRelayout(), { passive: true })
+
+  // Start physics loop for segment following
+  requestAnimationFrame(physicsLoop)
+}
+
+function updateSegmentPos(i) {
+  segments[i].el.style.transform = `translate(${segments[i].x}px, ${segments[i].y}px)`
+}
+
+// --- Physics: body & tail follow head with springy delay ---
+
+function physicsLoop() {
+  let moved = false
+
+  for (let i = 1; i < 3; i++) {
+    const leader = segments[i - 1]
+    const seg = segments[i]
+
+    // Target: below the leader, centered horizontally with slight offset
+    const targetX = leader.x + (leader.dim.w - seg.dim.w) / 2
+    const targetY = leader.y + leader.dim.h + SEGMENT_SPACING
+
+    seg.targetX = targetX
+    seg.targetY = targetY
+
+    // Smooth follow (ease toward target)
+    const dx = seg.targetX - seg.x
+    const dy = seg.targetY - seg.y
+
+    if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) {
+      // Each segment is progressively slower → serpentine feel
+      const speed = FOLLOW_SPEED / (i * 0.7 + 0.3)
+      seg.x += dx * speed
+      seg.y += dy * speed
+      updateSegmentPos(i)
+      moved = true
     }
-  }, { passive: true })
+  }
+
+  if (moved) scheduleRelayout()
+
+  requestAnimationFrame(physicsLoop)
 }
 
-function updateDragonPosition() {
-  dragon.el.style.transform = `translate(${dragon.x}px, ${dragon.y}px)`
-}
-
-// --- Init ---
+// =============================================
+// Init
+// =============================================
 
 function init() {
   document.fonts.ready.then(() => {
@@ -612,11 +541,11 @@ function init() {
       resizeTimer = setTimeout(() => {
         generateParchmentTexture(textureCanvas)
         render()
-        // Reposition dragon within view
+        // Keep dragon in bounds
         const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (dragon.x > pRect.right - 40) dragon.x = pRect.right - DRAGON_WIDTH - 20
-        if (dragon.x < pRect.left) dragon.x = pRect.left + 20
-        updateDragonPosition()
+        if (segments[0].x > pRect.right - 50) segments[0].x = pRect.right - segments[0].dim.w - 20
+        if (segments[0].x < pRect.left - 50) segments[0].x = pRect.left + 20
+        updateSegmentPos(0)
         scheduleRelayout()
       }, 200)
     })
