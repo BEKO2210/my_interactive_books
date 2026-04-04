@@ -4,10 +4,7 @@ import {
   layoutNextLine,
 } from '@chenglou/pretext'
 import { storyBlocks } from './story.js'
-import {
-  createHeadSVG, createBodySVG, createTailSVG,
-  startBlinking, SEGMENT_DIMS,
-} from './dragon.js'
+import { createDragonElement, startBlinking, DRAGON_WIDTH, DRAGON_HEIGHT } from './dragon.js'
 
 // =============================================
 // Font definitions
@@ -33,21 +30,16 @@ const WARNING_LH = 30
 const COLOPHON_LH = 26
 
 // =============================================
-// Dragon state — 3 segments with physics
+// Dragon state
 // =============================================
 
-const FOLLOW_SPEED = 0.12       // how fast segments follow (0–1)
-const SEGMENT_SPACING = 8       // gap between segments in px
-const DRAGON_PAD = 14           // text avoidance padding around each segment
+const DRAGON_PAD = 18
 
-const segments = [
-  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[0] },
-  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[1] },
-  { x: 0, y: 0, targetX: 0, targetY: 0, el: null, dim: SEGMENT_DIMS[2] },
-]
-
-const dragState = {
-  active: false,
+const dragon = {
+  x: 0,
+  y: 0,
+  el: null,
+  dragging: false,
   offsetX: 0,
   offsetY: 0,
 }
@@ -85,57 +77,42 @@ function generateParchmentTexture(canvas) {
 }
 
 // =============================================
-// Pretext text layout with dragon obstacles
+// Pretext layout with dragon obstacle
 // =============================================
 
-function getObstacleRects() {
-  const scrollEl = document.getElementById('scroll-container')
-  const scrollTop = scrollEl.scrollTop
-  return segments.map(s => ({
-    left:   s.x - DRAGON_PAD,
-    top:    s.y + scrollTop - DRAGON_PAD,
-    right:  s.x + s.dim.w + DRAGON_PAD,
-    bottom: s.y + s.dim.h + scrollTop + DRAGON_PAD,
-  }))
-}
-
-function lineAvailableWidth(lineTop, lineBot, blockLeft, blockWidth, obstacles) {
-  let left = blockLeft
-  let right = blockLeft + blockWidth
-
-  for (const ob of obstacles) {
-    if (lineBot <= ob.top || lineTop >= ob.bottom) continue
-    if (ob.right <= left || ob.left >= right) continue
-
-    // Obstacle overlaps this line — choose larger side
-    const leftSpace = Math.max(0, ob.left - left)
-    const rightSpace = Math.max(0, right - ob.right)
-
-    if (leftSpace >= rightSpace && leftSpace > 50) {
-      return { x: left, w: leftSpace }
-    } else if (rightSpace > 50) {
-      return { x: ob.right, w: rightSpace }
-    } else {
-      return null // blocked
-    }
+function getDragonObstacle() {
+  if (!dragon.el) return null
+  const scrollTop = document.getElementById('scroll-container').scrollTop
+  return {
+    left:   dragon.x - DRAGON_PAD,
+    top:    dragon.y + scrollTop - DRAGON_PAD,
+    right:  dragon.x + DRAGON_WIDTH + DRAGON_PAD,
+    bottom: dragon.y + DRAGON_HEIGHT + DRAGON_PAD,
   }
-
-  return { x: left, w: right - left }
 }
 
-function layoutAroundObstacles(text, font, lineHeight, blockTop, blockLeft, blockWidth, obstacles) {
+function lineAvailWidth(lineTop, lineBot, blockLeft, blockWidth, ob) {
+  if (!ob) return { x: blockLeft, w: blockWidth }
+  if (lineBot <= ob.top || lineTop >= ob.bottom) return { x: blockLeft, w: blockWidth }
+  if (ob.right <= blockLeft || ob.left >= blockLeft + blockWidth) return { x: blockLeft, w: blockWidth }
+
+  const leftSpace = Math.max(0, ob.left - blockLeft)
+  const rightSpace = Math.max(0, (blockLeft + blockWidth) - ob.right)
+
+  if (leftSpace >= rightSpace && leftSpace > 50) return { x: blockLeft, w: leftSpace }
+  if (rightSpace > 50) return { x: ob.right, w: rightSpace }
+  return null
+}
+
+function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, ob) {
   const prepared = prepareWithSegments(text, font)
   const lines = []
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = blockTop
 
-  for (let safety = 0; safety < 500; safety++) {
-    const avail = lineAvailableWidth(y, y + lineHeight, blockLeft, blockWidth, obstacles)
-
-    if (!avail) {
-      y += lineHeight
-      continue
-    }
+  for (let safe = 0; safe < 500; safe++) {
+    const avail = lineAvailWidth(y, y + lineHeight, blockLeft, blockWidth, ob)
+    if (!avail) { y += lineHeight; continue }
 
     const line = layoutNextLine(prepared, cursor, avail.w)
     if (line === null) break
@@ -149,7 +126,7 @@ function layoutAroundObstacles(text, font, lineHeight, blockTop, blockLeft, bloc
 }
 
 // =============================================
-// Block registry for relayout
+// Block registry + relayout
 // =============================================
 
 let registeredBlocks = []
@@ -162,16 +139,16 @@ function getContentWidth() {
   return p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
 }
 
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, obstacles) {
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, ob) {
   container.innerHTML = ''
 
-  if (obstacles && obstacles.length) {
+  if (ob) {
     const cRect = container.getBoundingClientRect()
     const scrollTop = document.getElementById('scroll-container').scrollTop
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
 
-    const result = layoutAroundObstacles(text, font, lineHeight, blockTop, blockLeft, maxWidth, obstacles)
+    const result = layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, maxWidth, ob)
     for (const line of result.lines) {
       const d = document.createElement('div')
       d.className = 'pt-line'
@@ -197,9 +174,9 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, obstacles
 }
 
 function relayoutAll() {
-  const obstacles = getObstacleRects()
+  const ob = getDragonObstacle()
   for (const b of registeredBlocks) {
-    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, obstacles)
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, ob)
   }
 }
 
@@ -391,7 +368,7 @@ function renderColophon(block) {
 }
 
 // =============================================
-// Dragon: init, drag, physics
+// Dragon: init + drag (touch-first)
 // =============================================
 
 function initDragon() {
@@ -399,128 +376,75 @@ function initDragon() {
   const parchment = document.getElementById('parchment')
   const pRect = parchment.getBoundingClientRect()
 
-  // Create the 3 segment elements
-  const creators = [createHeadSVG, createBodySVG, createTailSVG]
-  const classes = ['dragon-head', 'dragon-body', 'dragon-tail']
+  const el = document.createElement('div')
+  el.id = 'dragon'
+  el.setAttribute('role', 'img')
+  el.setAttribute('aria-label', 'Mittelalterlicher Drache — ziehe mich über den Text')
+  el.appendChild(createDragonElement())
+  document.body.appendChild(el)
+  dragon.el = el
 
-  for (let i = 0; i < 3; i++) {
-    const el = document.createElement('div')
-    el.className = `dragon-segment ${classes[i]}`
-    el.appendChild(creators[i]())
-    document.body.appendChild(el)
-    segments[i].el = el
-  }
+  // Initial position: top-right area of parchment
+  dragon.x = pRect.right - DRAGON_WIDTH - 20
+  dragon.y = pRect.top + 50
+  updateDragonPos()
 
-  // Initial position: stacked vertically at top-right
-  const startX = pRect.right - 160
-  let startY = pRect.top + 40
-  for (let i = 0; i < 3; i++) {
-    segments[i].x = segments[i].targetX = startX
-    segments[i].y = segments[i].targetY = startY
-    updateSegmentPos(i)
-    startY += segments[i].dim.h + SEGMENT_SPACING
-  }
+  startBlinking(el)
 
-  // Start blinking
-  startBlinking(segments[0].el)
-
-  // --- Touch drag (mobile-first) ---
-  segments[0].el.addEventListener('touchstart', (e) => {
+  // --- Touch (mobile-first) ---
+  el.addEventListener('touchstart', (e) => {
     e.preventDefault()
     const t = e.touches[0]
-    dragState.active = true
-    dragState.offsetX = t.clientX - segments[0].x
-    dragState.offsetY = t.clientY - segments[0].y
-    segments[0].el.classList.add('dragging')
+    dragon.dragging = true
+    dragon.offsetX = t.clientX - dragon.x
+    dragon.offsetY = t.clientY - dragon.y
+    el.classList.add('dragging')
   }, { passive: false })
 
   document.addEventListener('touchmove', (e) => {
-    if (!dragState.active) return
+    if (!dragon.dragging) return
     e.preventDefault()
     const t = e.touches[0]
-    segments[0].targetX = t.clientX - dragState.offsetX
-    segments[0].targetY = t.clientY - dragState.offsetY
-    segments[0].x = segments[0].targetX
-    segments[0].y = segments[0].targetY
-    updateSegmentPos(0)
+    dragon.x = t.clientX - dragon.offsetX
+    dragon.y = t.clientY - dragon.offsetY
+    updateDragonPos()
     scheduleRelayout()
   }, { passive: false })
 
   document.addEventListener('touchend', () => {
-    if (!dragState.active) return
-    dragState.active = false
-    segments[0].el.classList.remove('dragging')
+    if (!dragon.dragging) return
+    dragon.dragging = false
+    el.classList.remove('dragging')
   })
 
-  // --- Mouse drag ---
-  segments[0].el.addEventListener('mousedown', (e) => {
+  // --- Mouse ---
+  el.addEventListener('mousedown', (e) => {
     e.preventDefault()
-    dragState.active = true
-    dragState.offsetX = e.clientX - segments[0].x
-    dragState.offsetY = e.clientY - segments[0].y
-    segments[0].el.classList.add('dragging')
+    dragon.dragging = true
+    dragon.offsetX = e.clientX - dragon.x
+    dragon.offsetY = e.clientY - dragon.y
+    el.classList.add('dragging')
   })
 
   document.addEventListener('mousemove', (e) => {
-    if (!dragState.active) return
-    segments[0].targetX = e.clientX - dragState.offsetX
-    segments[0].targetY = e.clientY - dragState.offsetY
-    segments[0].x = segments[0].targetX
-    segments[0].y = segments[0].targetY
-    updateSegmentPos(0)
+    if (!dragon.dragging) return
+    dragon.x = e.clientX - dragon.offsetX
+    dragon.y = e.clientY - dragon.offsetY
+    updateDragonPos()
     scheduleRelayout()
   })
 
   document.addEventListener('mouseup', () => {
-    if (!dragState.active) return
-    dragState.active = false
-    segments[0].el.classList.remove('dragging')
+    if (!dragon.dragging) return
+    dragon.dragging = false
+    el.classList.remove('dragging')
   })
 
-  // Relayout on scroll
   scrollContainer.addEventListener('scroll', () => scheduleRelayout(), { passive: true })
-
-  // Start physics loop for segment following
-  requestAnimationFrame(physicsLoop)
 }
 
-function updateSegmentPos(i) {
-  segments[i].el.style.transform = `translate(${segments[i].x}px, ${segments[i].y}px)`
-}
-
-// --- Physics: body & tail follow head with springy delay ---
-
-function physicsLoop() {
-  let moved = false
-
-  for (let i = 1; i < 3; i++) {
-    const leader = segments[i - 1]
-    const seg = segments[i]
-
-    // Target: below the leader, centered horizontally with slight offset
-    const targetX = leader.x + (leader.dim.w - seg.dim.w) / 2
-    const targetY = leader.y + leader.dim.h + SEGMENT_SPACING
-
-    seg.targetX = targetX
-    seg.targetY = targetY
-
-    // Smooth follow (ease toward target)
-    const dx = seg.targetX - seg.x
-    const dy = seg.targetY - seg.y
-
-    if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) {
-      // Each segment is progressively slower → serpentine feel
-      const speed = FOLLOW_SPEED / (i * 0.7 + 0.3)
-      seg.x += dx * speed
-      seg.y += dy * speed
-      updateSegmentPos(i)
-      moved = true
-    }
-  }
-
-  if (moved) scheduleRelayout()
-
-  requestAnimationFrame(physicsLoop)
+function updateDragonPos() {
+  dragon.el.style.transform = `translate(${dragon.x}px, ${dragon.y}px)`
 }
 
 // =============================================
@@ -541,11 +465,10 @@ function init() {
       resizeTimer = setTimeout(() => {
         generateParchmentTexture(textureCanvas)
         render()
-        // Keep dragon in bounds
         const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (segments[0].x > pRect.right - 50) segments[0].x = pRect.right - segments[0].dim.w - 20
-        if (segments[0].x < pRect.left - 50) segments[0].x = pRect.left + 20
-        updateSegmentPos(0)
+        if (dragon.x > pRect.right - 40) dragon.x = pRect.right - DRAGON_WIDTH - 20
+        if (dragon.x < pRect.left - 50) dragon.x = pRect.left + 20
+        updateDragonPos()
         scheduleRelayout()
       }, 200)
     })
