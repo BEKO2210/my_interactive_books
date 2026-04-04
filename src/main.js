@@ -387,16 +387,8 @@ function renderBody(block, narrowW, shortW) {
   const wrapper = document.createElement('div')
   wrapper.className = cls
 
-  // Initiale as simple inline element before the text container
-  if (block.initial) {
-    const ini = document.createElement('span')
-    ini.className = 'ms-initial'
-    ini.textContent = block.initial
-    wrapper.appendChild(ini)
-  }
-
   const lc = document.createElement('div')
-  lc.className = 'ms-body pt-lines-container'
+  lc.className = 'ms-body pt-lines-container' + (block.dropcap ? ' has-dropcap' : '')
   wrapper.appendChild(lc)
 
   if (block.marginal) {
