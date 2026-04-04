@@ -33,7 +33,7 @@ const COLOPHON_LH = 26
 // Dragon state + contour
 // =============================================
 
-const CONTOUR_PAD = 8  // px padding around actual silhouette
+const CONTOUR_PAD = 2  // px padding around actual silhouette — tight fit
 
 const dragon = {
   x: 0,
@@ -192,28 +192,32 @@ function getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY) {
   }
 }
 
-function lineAvailWidth(lineTop, lineBot, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
+// Returns array of available intervals [{x, w}, ...] for a text line.
+// Can return TWO intervals when the marker splits the line (text on both sides).
+function lineAvailIntervals(lineTop, lineBot, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
   const span = getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY)
-
-  // No dragon overlap at this line height
-  if (!span) return { x: blockLeft, w: blockWidth }
-
   const blockRight = blockLeft + blockWidth
 
-  // Dragon contour doesn't overlap block horizontally
-  if (span.right <= blockLeft || span.left >= blockRight) {
-    return { x: blockLeft, w: blockWidth }
+  // No overlap — full width available
+  if (!span || span.right <= blockLeft || span.left >= blockRight) {
+    return [{ x: blockLeft, w: blockWidth }]
   }
 
-  // Dragon is in the way — pick the bigger side
-  const leftSpace = Math.max(0, span.left - blockLeft)
-  const rightSpace = Math.max(0, blockRight - span.right)
+  const intervals = []
+  const leftW = span.left - blockLeft
+  const rightW = blockRight - span.right
 
-  if (leftSpace >= rightSpace && leftSpace > 50) return { x: blockLeft, w: leftSpace }
-  if (rightSpace > 50) return { x: span.right, w: rightSpace }
-  return null // fully blocked
+  // Left side
+  if (leftW > 15) intervals.push({ x: blockLeft, w: leftW })
+  // Right side
+  if (rightW > 15) intervals.push({ x: span.right, w: rightW })
+
+  // If both sides are too narrow, skip line
+  return intervals.length > 0 ? intervals : null
 }
 
+// Lay out text flowing around the marker, using BOTH sides when available.
+// Uses Pretext's layoutNextLine for each interval per line.
 function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
   const prepared = prepareWithSegments(text, font)
   const lines = []
@@ -221,13 +225,20 @@ function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWi
   let y = blockTop
 
   for (let safe = 0; safe < 500; safe++) {
-    const avail = lineAvailWidth(y, y + lineHeight, blockLeft, blockWidth, dragonScreenX, dragonScreenY)
-    if (!avail) { y += lineHeight; continue }
+    const intervals = lineAvailIntervals(y, y + lineHeight, blockLeft, blockWidth, dragonScreenX, dragonScreenY)
+    if (!intervals) { y += lineHeight; continue }
 
-    const line = layoutNextLine(prepared, cursor, avail.w)
+    // Pick the widest interval for this line's main text flow
+    // (Pretext flows sequentially, so we can only use one interval per line call)
+    let bestInterval = intervals[0]
+    for (let i = 1; i < intervals.length; i++) {
+      if (intervals[i].w > bestInterval.w) bestInterval = intervals[i]
+    }
+
+    const line = layoutNextLine(prepared, cursor, bestInterval.w)
     if (line === null) break
 
-    lines.push({ text: line.text, width: line.width, x: avail.x, y })
+    lines.push({ text: line.text, width: line.width, x: bestInterval.x, y })
     cursor = line.end
     y += lineHeight
   }
