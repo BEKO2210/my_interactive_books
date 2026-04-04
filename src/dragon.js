@@ -1,17 +1,16 @@
-// Medieval bookmark marker — draggable element
-// SVG provided by user, used as the interactive text-displacing object
+// Stern (Star) — draggable element with rotation physics
+// Rotates proportionally to drag movement
 
-import markerSvgRaw from './marker-asset.svg?raw'
+import sternSvgRaw from './Stern.svg?raw'
 
-export const MARKER_WIDTH = 75
-export const MARKER_HEIGHT = 100
+export const STERN_SIZE = 120 // square, displayed size
 
-export function createMarkerElement() {
+export function createSternElement() {
   const wrapper = document.createElement('div')
-  wrapper.innerHTML = markerSvgRaw
+  wrapper.innerHTML = sternSvgRaw
   const svg = wrapper.querySelector('svg')
-  svg.setAttribute('width', String(MARKER_WIDTH))
-  svg.setAttribute('height', String(MARKER_HEIGHT))
+  svg.setAttribute('width', String(STERN_SIZE))
+  svg.setAttribute('height', String(STERN_SIZE))
   svg.removeAttribute('x')
   svg.removeAttribute('y')
   svg.style.display = 'block'

@@ -71,10 +71,10 @@ html, body {
 }
 
 /* ==========================================
-   MARKER (draggable bookmark)
+   STERN (draggable star)
    ========================================== */
 
-#marker {
+#stern {
   position: fixed;
   top: 0; left: 0;
   z-index: 100;
@@ -87,16 +87,16 @@ html, body {
   transition: filter 0.15s ease;
 }
 
-#marker svg {
+#stern svg {
   display: block;
   pointer-events: auto;
 }
 
-#marker:hover {
+#stern:hover {
   filter: drop-shadow(2px 3px 6px rgba(20, 10, 0, 0.45));
 }
 
-#marker.dragging {
+#stern.dragging {
   cursor: grabbing;
   filter: drop-shadow(3px 5px 8px rgba(20, 10, 0, 0.5));
 }
