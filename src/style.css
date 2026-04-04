@@ -71,52 +71,36 @@ html, body {
 }
 
 /* ==========================================
-   DRAGON — 3-segment serpentine
+   DRAGON
    ========================================== */
 
-.dragon-segment {
+#dragon {
   position: fixed;
   top: 0; left: 0;
   z-index: 100;
+  cursor: grab;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   will-change: transform;
-  pointer-events: none;
-  filter: drop-shadow(1px 3px 5px rgba(20, 10, 0, 0.45));
+  filter: drop-shadow(2px 4px 8px rgba(20, 10, 0, 0.5));
   transition: filter 0.2s ease;
 }
 
-.dragon-segment svg {
+#dragon svg {
   display: block;
-}
-
-/* Only head is interactive (drag handle) */
-.dragon-head {
-  cursor: grab;
   pointer-events: auto;
-  z-index: 103;
 }
 
-.dragon-head:hover {
-  filter: drop-shadow(2px 4px 8px rgba(80, 40, 5, 0.6))
-          drop-shadow(0 0 12px rgba(196, 148, 58, 0.2));
+#dragon:hover {
+  filter: drop-shadow(2px 4px 10px rgba(80, 40, 5, 0.6))
+          drop-shadow(0 0 14px rgba(196, 148, 58, 0.15));
 }
 
-.dragon-head.dragging {
+#dragon.dragging {
   cursor: grabbing;
-  filter: drop-shadow(3px 6px 10px rgba(20, 10, 0, 0.6))
-          drop-shadow(0 0 18px rgba(196, 148, 58, 0.25));
-}
-
-.dragon-body {
-  z-index: 102;
-  transition: transform 0.06s linear;
-}
-
-.dragon-tail {
-  z-index: 101;
-  transition: transform 0.06s linear;
+  filter: drop-shadow(4px 8px 14px rgba(20, 10, 0, 0.65))
+          drop-shadow(0 0 20px rgba(196, 148, 58, 0.2));
 }
 
 /* ==========================================
