@@ -257,8 +257,26 @@ function getContentWidth() {
 }
 
 // Render a text block's lines as absolutely-positioned spans (editorial-engine pattern)
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour, rectObstacles) {
-  container.innerHTML = ''
+// Measure drop cap element and return a rect obstacle in absolute coords
+function measureDropCap(initialEl, lineHeight) {
+  if (!initialEl || !initialEl.parentElement) return null
+  const rect = initialEl.getBoundingClientRect()
+  if (rect.width === 0) return null
+  const scrollTop = document.getElementById('scroll-container').scrollTop
+  return [{
+    left: rect.left - 2,
+    top: rect.top + scrollTop - 2,
+    right: rect.right + 4,
+    bottom: rect.top + scrollTop + lineHeight * 3 + 4,
+  }]
+}
+
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour, initialEl) {
+  // Remove all children EXCEPT the initial element
+  const children = Array.from(container.children)
+  for (const child of children) {
+    if (child !== initialEl) container.removeChild(child)
+  }
 
   const prepared = prepareWithSegments(text, font)
 
@@ -267,6 +285,9 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
     const scrollTop = document.getElementById('scroll-container').scrollTop
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
+
+    // Live-measure drop cap for rect obstacle
+    const rectObstacles = measureDropCap(initialEl, lineHeight)
 
     const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight, rectObstacles)
 
@@ -302,7 +323,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 function relayoutAll() {
   const useContour = !!stern.contour
   for (const b of registeredBlocks) {
-    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour, b.rectObstacles || null)
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour, b.initialEl || null)
   }
 }
 
@@ -381,20 +402,18 @@ function renderBody(block, narrowW, shortW) {
   const wrapper = document.createElement('div')
   wrapper.className = cls
 
-  let dropCapObstacle = null
-
-  if (block.initial) {
-    const ini = document.createElement('span')
-    ini.className = 'ms-initial'
-    ini.textContent = block.initial
-    wrapper.appendChild(ini)
-
-    // We'll measure the drop cap after it's in the DOM and create a rect obstacle
-    // so Pretext flows text around it properly
-  }
-
+  // Drop cap is placed inside the lines container so it's measured relative to it
   const lc = document.createElement('div')
   lc.className = 'ms-body pt-lines-container'
+
+  let iniEl = null
+  if (block.initial) {
+    iniEl = document.createElement('span')
+    iniEl.className = 'ms-initial'
+    iniEl.textContent = block.initial
+    lc.appendChild(iniEl)
+  }
+
   wrapper.appendChild(lc)
 
   if (block.marginal) {
@@ -406,23 +425,15 @@ function renderBody(block, narrowW, shortW) {
 
   manuscriptEl.appendChild(wrapper)
 
-  // Measure drop cap AFTER it's in the DOM
-  if (block.initial) {
-    const iniEl = wrapper.querySelector('.ms-initial')
-    if (iniEl) {
-      const iniRect = iniEl.getBoundingClientRect()
-      const scrollTop = document.getElementById('scroll-container').scrollTop
-      dropCapObstacle = [{
-        left: iniRect.left - 2,
-        top: iniRect.top + scrollTop - 2,
-        right: iniRect.right + 4,
-        bottom: iniRect.top + scrollTop + BODY_LH * 3 + 4, // spans ~3 lines
-      }]
-    }
-  }
-
-  registerBlock(lc, { text: block.text, font: BODY_FONT, lineHeight: BODY_LH, maxWidth: maxW, rectObstacles: dropCapObstacle })
-  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null, dropCapObstacle)
+  // Store reference to initial element for live measurement during relayout
+  registerBlock(lc, {
+    text: block.text,
+    font: BODY_FONT,
+    lineHeight: BODY_LH,
+    maxWidth: maxW,
+    initialEl: iniEl,
+  })
+  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null, null)
 }
 
 function renderHighlight(block) {
@@ -654,7 +665,7 @@ function init() {
         const pRect = document.getElementById('parchment').getBoundingClientRect()
         if (stern.x > pRect.right - 40) stern.x = pRect.right - STERN_SIZE - 20
         if (stern.x < pRect.left - 50) stern.x = pRect.left + 20
-        updateMarkerPos()
+        updateSternPos()
         scheduleRelayout()
       }, 200)
     })
