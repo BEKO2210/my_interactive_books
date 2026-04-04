@@ -4,7 +4,7 @@ import {
   layoutNextLine,
 } from '@chenglou/pretext'
 import { storyBlocks } from './story.js'
-import { createMarkerElement, MARKER_WIDTH, MARKER_HEIGHT } from './dragon.js'
+import { createSternElement, STERN_SIZE } from './dragon.js'
 
 // =============================================
 // Font config
@@ -36,12 +36,14 @@ const MIN_SLOT_WIDTH = 30
 // Marker state + contour
 // =============================================
 
-const marker = {
+const stern = {
   x: 0, y: 0,
   el: null,
   dragging: false,
   offsetX: 0, offsetY: 0,
   contour: null, // array of {left,right}|null per pixel-row
+  rotation: 0,   // current rotation in degrees
+  prevX: 0, prevY: 0, // previous position for velocity calc
 }
 
 // =============================================
@@ -80,8 +82,8 @@ function generateParchmentTexture(canvas) {
 
 function computeContour(svgElement) {
   const canvas = document.createElement('canvas')
-  const w = MARKER_WIDTH
-  const h = MARKER_HEIGHT
+  const w = STERN_SIZE
+  const h = STERN_SIZE
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
@@ -147,11 +149,11 @@ function carveSlots(base, blocked) {
 
 // Get the blocked interval from the marker contour for a given line band
 function getContourBlockedInterval(bandTop, bandBottom) {
-  const contour = marker.contour
+  const contour = stern.contour
   if (!contour) return null
 
   const scrollTop = document.getElementById('scroll-container').scrollTop
-  const markerAbsY = marker.y + scrollTop
+  const markerAbsY = stern.y + scrollTop
 
   const localTop = Math.floor(bandTop - markerAbsY)
   const localBot = Math.ceil(bandBottom - markerAbsY)
@@ -172,7 +174,7 @@ function getContourBlockedInterval(bandTop, bandBottom) {
   }
 
   if (!hit) return null
-  return { left: marker.x + minLeft, right: marker.x + maxRight }
+  return { left: stern.x + minLeft, right: stern.x + maxRight }
 }
 
 // =============================================
@@ -249,7 +251,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 
   const prepared = prepareWithSegments(text, font)
 
-  if (useContour && marker.contour) {
+  if (useContour && stern.contour) {
     const cRect = container.getBoundingClientRect()
     const scrollTop = document.getElementById('scroll-container').scrollTop
     const blockTop = cRect.top + scrollTop
@@ -289,7 +291,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 }
 
 function relayoutAll() {
-  const useContour = !!marker.contour
+  const useContour = !!stern.contour
   for (const b of registeredBlocks) {
     layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour)
   }
@@ -483,87 +485,104 @@ function renderColophon(block) {
 }
 
 // =============================================
-// Marker: init + drag (touch-first, mobile-first)
+// Stern: init + drag + rotation (touch-first)
 // =============================================
 
-function initMarker() {
+function initStern() {
   const scrollContainer = document.getElementById('scroll-container')
   const parchment = document.getElementById('parchment')
   const pRect = parchment.getBoundingClientRect()
 
-  const svgEl = createMarkerElement()
+  const svgEl = createSternElement()
   const el = document.createElement('div')
-  el.id = 'marker'
+  el.id = 'stern'
   el.setAttribute('role', 'img')
-  el.setAttribute('aria-label', 'Lesezeichen — ziehe mich über den Text')
+  el.setAttribute('aria-label', 'Stern — ziehe mich über den Text')
   el.appendChild(svgEl)
   document.body.appendChild(el)
-  marker.el = el
+  stern.el = el
 
-  marker.x = pRect.right - MARKER_WIDTH - 20
-  marker.y = pRect.top + 50
-  updateMarkerPos()
+  stern.x = pRect.right - STERN_SIZE - 20
+  stern.y = pRect.top + 50
+  stern.prevX = stern.x
+  stern.prevY = stern.y
+  updateSternPos()
 
-  // Compute contour from SVG shape
   computeContour(svgEl).then(contour => {
-    marker.contour = contour
+    stern.contour = contour
     scheduleRelayout()
   })
+
+  function onDragStart(clientX, clientY) {
+    stern.dragging = true
+    stern.offsetX = clientX - stern.x
+    stern.offsetY = clientY - stern.y
+    stern.prevX = stern.x
+    stern.prevY = stern.y
+    el.classList.add('dragging')
+  }
+
+  function onDragMove(clientX, clientY) {
+    if (!stern.dragging) return
+    const newX = clientX - stern.offsetX
+    const newY = clientY - stern.offsetY
+
+    // Rotation proportional to movement distance
+    const dx = newX - stern.prevX
+    const dy = newY - stern.prevY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    // Direction: clockwise when moving right, counter-clockwise left
+    const dir = dx >= 0 ? 1 : -1
+    stern.rotation += dir * dist * 0.5
+
+    stern.prevX = newX
+    stern.prevY = newY
+    stern.x = newX
+    stern.y = newY
+    updateSternPos()
+    scheduleRelayout()
+  }
+
+  function onDragEnd() {
+    if (!stern.dragging) return
+    stern.dragging = false
+    el.classList.remove('dragging')
+  }
 
   // --- Touch (mobile-first) ---
   el.addEventListener('touchstart', (e) => {
     e.preventDefault()
     const t = e.touches[0]
-    marker.dragging = true
-    marker.offsetX = t.clientX - marker.x
-    marker.offsetY = t.clientY - marker.y
-    el.classList.add('dragging')
+    onDragStart(t.clientX, t.clientY)
   }, { passive: false })
 
   document.addEventListener('touchmove', (e) => {
-    if (!marker.dragging) return
+    if (!stern.dragging) return
     e.preventDefault()
     const t = e.touches[0]
-    marker.x = t.clientX - marker.offsetX
-    marker.y = t.clientY - marker.offsetY
-    updateMarkerPos()
-    scheduleRelayout()
+    onDragMove(t.clientX, t.clientY)
   }, { passive: false })
 
-  document.addEventListener('touchend', () => {
-    if (!marker.dragging) return
-    marker.dragging = false
-    el.classList.remove('dragging')
-  })
+  document.addEventListener('touchend', onDragEnd)
 
   // --- Mouse ---
   el.addEventListener('mousedown', (e) => {
     e.preventDefault()
-    marker.dragging = true
-    marker.offsetX = e.clientX - marker.x
-    marker.offsetY = e.clientY - marker.y
-    el.classList.add('dragging')
+    onDragStart(e.clientX, e.clientY)
   })
 
   document.addEventListener('mousemove', (e) => {
-    if (!marker.dragging) return
-    marker.x = e.clientX - marker.offsetX
-    marker.y = e.clientY - marker.offsetY
-    updateMarkerPos()
-    scheduleRelayout()
+    if (!stern.dragging) return
+    onDragMove(e.clientX, e.clientY)
   })
 
-  document.addEventListener('mouseup', () => {
-    if (!marker.dragging) return
-    marker.dragging = false
-    el.classList.remove('dragging')
-  })
+  document.addEventListener('mouseup', onDragEnd)
 
   scrollContainer.addEventListener('scroll', () => scheduleRelayout(), { passive: true })
 }
 
-function updateMarkerPos() {
-  marker.el.style.transform = `translate(${marker.x}px, ${marker.y}px)`
+function updateSternPos() {
+  stern.el.style.transform = `translate(${stern.x}px, ${stern.y}px) rotate(${stern.rotation}deg)`
 }
 
 // =============================================
@@ -575,7 +594,7 @@ function init() {
     const textureCanvas = document.getElementById('texture-canvas')
     generateParchmentTexture(textureCanvas)
     render()
-    initMarker()
+    initStern()
 
     let resizeTimer
     window.addEventListener('resize', () => {
@@ -584,8 +603,8 @@ function init() {
         generateParchmentTexture(textureCanvas)
         render()
         const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (marker.x > pRect.right - 40) marker.x = pRect.right - MARKER_WIDTH - 20
-        if (marker.x < pRect.left - 50) marker.x = pRect.left + 20
+        if (stern.x > pRect.right - 40) stern.x = pRect.right - STERN_SIZE - 20
+        if (stern.x < pRect.left - 50) stern.x = pRect.left + 20
         updateMarkerPos()
         scheduleRelayout()
       }, 200)
