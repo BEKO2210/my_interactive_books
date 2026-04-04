@@ -181,9 +181,10 @@ function getContourBlockedInterval(bandTop, bandBottom) {
 // Pretext layout with slot carving
 // =============================================
 
-// Lay out a text block: for each line, carve available slots around the marker,
+// Lay out a text block: for each line, carve available slots around obstacles,
 // then fill slots with text using layoutNextLine (text flows both sides).
-function layoutTextBlock(prepared, regionLeft, regionTop, regionWidth, lineHeight) {
+// rectObstacles: array of {left, top, right, bottom} in absolute coords
+function layoutTextBlock(prepared, regionLeft, regionTop, regionWidth, lineHeight, rectObstacles) {
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = regionTop
   const lines = []
@@ -193,10 +194,20 @@ function layoutTextBlock(prepared, regionLeft, regionTop, regionWidth, lineHeigh
     const bandTop = y
     const bandBottom = y + lineHeight
 
-    // Get blocked interval from marker contour
+    // Collect all blocked intervals
     const blocked = []
-    const interval = getContourBlockedInterval(bandTop, bandBottom)
-    if (interval) blocked.push(interval)
+
+    // Stern contour
+    const sternInterval = getContourBlockedInterval(bandTop, bandBottom)
+    if (sternInterval) blocked.push(sternInterval)
+
+    // Rect obstacles (e.g. drop cap)
+    if (rectObstacles) {
+      for (const rect of rectObstacles) {
+        if (bandBottom <= rect.top || bandTop >= rect.bottom) continue
+        blocked.push({ left: rect.left, right: rect.right })
+      }
+    }
 
     // Carve available slots
     const slots = carveSlots({ left: regionLeft, right: regionRight }, blocked)
@@ -246,7 +257,7 @@ function getContentWidth() {
 }
 
 // Render a text block's lines as absolutely-positioned spans (editorial-engine pattern)
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour) {
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour, rectObstacles) {
   container.innerHTML = ''
 
   const prepared = prepareWithSegments(text, font)
@@ -257,9 +268,8 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
 
-    const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight)
+    const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight, rectObstacles)
 
-    // Set container height
     container.style.height = result.height + 'px'
     container.style.position = 'relative'
 
@@ -274,7 +284,6 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
       container.appendChild(span)
     }
   } else {
-    // Standard layout without marker
     const result = layoutWithLines(prepared, maxWidth, lineHeight)
     container.style.height = ''
     container.style.position = ''
@@ -293,7 +302,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 function relayoutAll() {
   const useContour = !!stern.contour
   for (const b of registeredBlocks) {
-    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour)
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour, b.rectObstacles || null)
   }
 }
 
@@ -372,11 +381,16 @@ function renderBody(block, narrowW, shortW) {
   const wrapper = document.createElement('div')
   wrapper.className = cls
 
+  let dropCapObstacle = null
+
   if (block.initial) {
     const ini = document.createElement('span')
     ini.className = 'ms-initial'
     ini.textContent = block.initial
     wrapper.appendChild(ini)
+
+    // We'll measure the drop cap after it's in the DOM and create a rect obstacle
+    // so Pretext flows text around it properly
   }
 
   const lc = document.createElement('div')
@@ -391,8 +405,24 @@ function renderBody(block, narrowW, shortW) {
   }
 
   manuscriptEl.appendChild(wrapper)
-  registerBlock(lc, { text: block.text, font: BODY_FONT, lineHeight: BODY_LH, maxWidth: maxW })
-  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null)
+
+  // Measure drop cap AFTER it's in the DOM
+  if (block.initial) {
+    const iniEl = wrapper.querySelector('.ms-initial')
+    if (iniEl) {
+      const iniRect = iniEl.getBoundingClientRect()
+      const scrollTop = document.getElementById('scroll-container').scrollTop
+      dropCapObstacle = [{
+        left: iniRect.left - 2,
+        top: iniRect.top + scrollTop - 2,
+        right: iniRect.right + 4,
+        bottom: iniRect.top + scrollTop + BODY_LH * 3 + 4, // spans ~3 lines
+      }]
+    }
+  }
+
+  registerBlock(lc, { text: block.text, font: BODY_FONT, lineHeight: BODY_LH, maxWidth: maxW, rectObstacles: dropCapObstacle })
+  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null, dropCapObstacle)
 }
 
 function renderHighlight(block) {
@@ -508,12 +538,31 @@ function initStern() {
   stern.prevY = stern.y
   updateSternPos()
 
+  // Add drag hint (arrow + handwritten text)
+  const hint = document.createElement('div')
+  hint.id = 'drag-hint'
+  hint.innerHTML = `
+    <svg class="drag-hint-arrow" viewBox="0 0 60 80" width="36" height="48">
+      <path d="M 30 2 Q 28 20 20 35 Q 15 42 8 48" fill="none" stroke="#6b1a0a" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 3 40 L 8 48 L 16 43" fill="none" stroke="#6b1a0a" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <span class="drag-hint-text">Zieh mich!</span>
+  `
+  el.appendChild(hint)
+
+  // Hide hint after first drag
+  function hideHint() {
+    hint.style.opacity = '0'
+    setTimeout(() => hint.remove(), 400)
+  }
+
   computeContour(svgEl).then(contour => {
     stern.contour = contour
     scheduleRelayout()
   })
 
   function onDragStart(clientX, clientY) {
+    hideHint()
     stern.dragging = true
     stern.offsetX = clientX - stern.x
     stern.offsetY = clientY - stern.y

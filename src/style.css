@@ -96,6 +96,41 @@ html, body {
   filter: drop-shadow(2px 3px 6px rgba(20, 10, 0, 0.45));
 }
 
+/* --- Drag hint (arrow + handwritten label) --- */
+
+#drag-hint {
+  position: absolute;
+  bottom: -52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  animation: hintPulse 2s ease-in-out infinite;
+  white-space: nowrap;
+}
+
+.drag-hint-arrow {
+  flex-shrink: 0;
+}
+
+.drag-hint-text {
+  font-family: 'IM Fell DW Pica', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: #6b1a0a;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(180, 150, 100, 0.4);
+}
+
+@keyframes hintPulse {
+  0%, 100% { opacity: 0.85; transform: translateX(-50%) translateY(0); }
+  50% { opacity: 1; transform: translateX(-50%) translateY(3px); }
+}
+
 #stern.dragging {
   cursor: grabbing;
   filter: drop-shadow(3px 5px 8px rgba(20, 10, 0, 0.5));
@@ -140,6 +175,7 @@ html, body {
   text-align: justify;
   hyphens: auto;
   -webkit-hyphens: auto;
+  overflow: visible;
 }
 
 .ms-paragraph-narrow {
@@ -159,13 +195,15 @@ html, body {
 }
 
 .ms-initial {
-  float: left;
+  position: absolute;
+  top: 0;
+  left: 0;
   font-family: 'Uncial Antiqua', serif;
   font-size: 3.2em;
-  line-height: 0.8;
-  padding-right: 6px;
-  padding-top: 4px;
+  line-height: 0.85;
+  padding-right: 4px;
   color: #6b1a0a;
+  z-index: 2;
 }
 
 /* --- Marginal notes --- */
