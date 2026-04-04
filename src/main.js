@@ -7,7 +7,7 @@ import { storyBlocks } from './story.js'
 import { createMarkerElement, MARKER_WIDTH, MARKER_HEIGHT } from './dragon.js'
 
 // =============================================
-// Font definitions
+// Font config
 // =============================================
 
 const BODY_FONT = '18px "IM Fell English", "Palatino Linotype", "Book Antiqua", Palatino, serif'
@@ -29,20 +29,19 @@ const LIST_LH = 28
 const WARNING_LH = 30
 const COLOPHON_LH = 26
 
+const CONTOUR_PAD = 3
+const MIN_SLOT_WIDTH = 30
+
 // =============================================
-// Dragon state + contour
+// Marker state + contour
 // =============================================
 
-const CONTOUR_PAD = 2  // px padding around actual silhouette — tight fit
-
-const dragon = {
-  x: 0,
-  y: 0,
+const marker = {
+  x: 0, y: 0,
   el: null,
   dragging: false,
-  offsetX: 0,
-  offsetY: 0,
-  contour: null, // array of { left, right } per row (in dragon-local px)
+  offsetX: 0, offsetY: 0,
+  contour: null, // array of {left,right}|null per pixel-row
 }
 
 // =============================================
@@ -58,7 +57,6 @@ function generateParchmentTexture(canvas) {
   canvas.style.height = rect.height + 'px'
   const ctx = canvas.getContext('2d')
   ctx.clearRect(0, 0, w, h)
-
   const imageData = ctx.createImageData(w, h)
   const d = imageData.data
   for (let i = 0; i < d.length; i += 4) {
@@ -66,7 +64,6 @@ function generateParchmentTexture(canvas) {
     d[i] = n; d[i+1] = n * 0.8; d[i+2] = n * 0.5; d[i+3] = Math.random() * 25
   }
   ctx.putImageData(imageData, 0, 0)
-
   for (let i = 0; i < 20; i++) {
     const x = Math.random() * w, y = Math.random() * h, r = Math.random() * 40 + 5
     const g = ctx.createRadialGradient(x, y, 0, x, y, r)
@@ -78,23 +75,16 @@ function generateParchmentTexture(canvas) {
 }
 
 // =============================================
-// Dragon contour scanning
+// Contour scanning (SVG → per-row left/right)
 // =============================================
 
-// Render the dragon SVG to an offscreen canvas and scan each row
-// to find the actual left/right edges of the silhouette.
-// Result: an array indexed by Y (in dragon-local px), each entry
-// is { left, right } of the opaque region, or null if empty row.
-
-function computeDragonContour(svgElement) {
+function computeContour(svgElement) {
   const canvas = document.createElement('canvas')
   const w = MARKER_WIDTH
   const h = MARKER_HEIGHT
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
-
-  // Serialize SVG to an image
   const svgClone = svgElement.cloneNode(true)
   svgClone.setAttribute('width', w)
   svgClone.setAttribute('height', h)
@@ -109,36 +99,24 @@ function computeDragonContour(svgElement) {
       const imageData = ctx.getImageData(0, 0, w, h)
       const data = imageData.data
       const contour = []
-
       for (let y = 0; y < h; y++) {
-        let left = -1
-        let right = -1
+        let left = -1, right = -1
         for (let x = 0; x < w; x++) {
-          const alpha = data[(y * w + x) * 4 + 3]
-          if (alpha > 20) {
+          if (data[(y * w + x) * 4 + 3] > 20) {
             if (left === -1) left = x
             right = x
           }
         }
-        if (left === -1) {
-          contour.push(null)
-        } else {
-          // Add padding around the shape
-          contour.push({
-            left: Math.max(0, left - CONTOUR_PAD),
-            right: Math.min(w, right + CONTOUR_PAD),
-          })
-        }
+        contour.push(left === -1 ? null : {
+          left: Math.max(0, left - CONTOUR_PAD),
+          right: Math.min(w, right + CONTOUR_PAD + 1),
+        })
       }
-
       resolve(contour)
     }
     img.onerror = () => {
-      // Fallback: rectangular contour
       const contour = []
-      for (let y = 0; y < h; y++) {
-        contour.push({ left: 0, right: w })
-      }
+      for (let y = 0; y < h; y++) contour.push({ left: 0, right: w })
       resolve(contour)
     }
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData)
@@ -146,31 +124,41 @@ function computeDragonContour(svgElement) {
 }
 
 // =============================================
-// Pretext layout with contour-based obstacle
+// Slot carving (editorial-engine pattern)
 // =============================================
 
-// For a text line at lineTop..lineBot, find the widest dragon span
-// across those rows (in screen coordinates), then compute available text width.
+// Given a base interval and blocked intervals, return remaining slots
+function carveSlots(base, blocked) {
+  let slots = [base]
+  for (const interval of blocked) {
+    const next = []
+    for (const slot of slots) {
+      if (interval.right <= slot.left || interval.left >= slot.right) {
+        next.push(slot)
+        continue
+      }
+      if (interval.left > slot.left) next.push({ left: slot.left, right: interval.left })
+      if (interval.right < slot.right) next.push({ left: interval.right, right: slot.right })
+    }
+    slots = next
+  }
+  return slots.filter(s => (s.right - s.left) >= MIN_SLOT_WIDTH)
+}
 
-function getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY) {
-  const contour = dragon.contour
+// Get the blocked interval from the marker contour for a given line band
+function getContourBlockedInterval(bandTop, bandBottom) {
+  const contour = marker.contour
   if (!contour) return null
 
   const scrollTop = document.getElementById('scroll-container').scrollTop
-  const dragonAbsY = dragonScreenY + scrollTop
+  const markerAbsY = marker.y + scrollTop
 
-  // Map line Y range to dragon-local Y
-  const localTop = Math.floor(lineTop - dragonAbsY)
-  const localBot = Math.ceil(lineBot - dragonAbsY)
+  const localTop = Math.floor(bandTop - markerAbsY)
+  const localBot = Math.ceil(bandBottom - markerAbsY)
 
-  // No vertical overlap with dragon
   if (localBot <= 0 || localTop >= contour.length) return null
 
-  // Find the widest (leftmost left, rightmost right) across the line's rows
-  let minLeft = Infinity
-  let maxRight = -Infinity
-  let hasHit = false
-
+  let minLeft = Infinity, maxRight = -Infinity, hit = false
   const startY = Math.max(0, localTop)
   const endY = Math.min(contour.length, localBot)
 
@@ -179,71 +167,66 @@ function getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY) {
     if (row) {
       if (row.left < minLeft) minLeft = row.left
       if (row.right > maxRight) maxRight = row.right
-      hasHit = true
+      hit = true
     }
   }
 
-  if (!hasHit) return null
-
-  // Convert to screen coordinates
-  return {
-    left: dragonScreenX + minLeft,
-    right: dragonScreenX + maxRight,
-  }
+  if (!hit) return null
+  return { left: marker.x + minLeft, right: marker.x + maxRight }
 }
 
-// Returns array of available intervals [{x, w}, ...] for a text line.
-// Can return TWO intervals when the marker splits the line (text on both sides).
-function lineAvailIntervals(lineTop, lineBot, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
-  const span = getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY)
-  const blockRight = blockLeft + blockWidth
+// =============================================
+// Pretext layout with slot carving
+// =============================================
 
-  // No overlap — full width available
-  if (!span || span.right <= blockLeft || span.left >= blockRight) {
-    return [{ x: blockLeft, w: blockWidth }]
-  }
-
-  const intervals = []
-  const leftW = span.left - blockLeft
-  const rightW = blockRight - span.right
-
-  // Left side
-  if (leftW > 15) intervals.push({ x: blockLeft, w: leftW })
-  // Right side
-  if (rightW > 15) intervals.push({ x: span.right, w: rightW })
-
-  // If both sides are too narrow, skip line
-  return intervals.length > 0 ? intervals : null
-}
-
-// Lay out text flowing around the marker, using BOTH sides when available.
-// Uses Pretext's layoutNextLine for each interval per line.
-function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
-  const prepared = prepareWithSegments(text, font)
-  const lines = []
+// Lay out a text block: for each line, carve available slots around the marker,
+// then fill slots with text using layoutNextLine (text flows both sides).
+function layoutTextBlock(prepared, regionLeft, regionTop, regionWidth, lineHeight) {
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  let y = blockTop
+  let y = regionTop
+  const lines = []
+  const regionRight = regionLeft + regionWidth
 
-  for (let safe = 0; safe < 500; safe++) {
-    const intervals = lineAvailIntervals(y, y + lineHeight, blockLeft, blockWidth, dragonScreenX, dragonScreenY)
-    if (!intervals) { y += lineHeight; continue }
+  for (let safe = 0; safe < 600; safe++) {
+    const bandTop = y
+    const bandBottom = y + lineHeight
 
-    // Pick the widest interval for this line's main text flow
-    // (Pretext flows sequentially, so we can only use one interval per line call)
-    let bestInterval = intervals[0]
-    for (let i = 1; i < intervals.length; i++) {
-      if (intervals[i].w > bestInterval.w) bestInterval = intervals[i]
+    // Get blocked interval from marker contour
+    const blocked = []
+    const interval = getContourBlockedInterval(bandTop, bandBottom)
+    if (interval) blocked.push(interval)
+
+    // Carve available slots
+    const slots = carveSlots({ left: regionLeft, right: regionRight }, blocked)
+
+    if (slots.length === 0) {
+      y += lineHeight
+      continue
     }
 
-    const line = layoutNextLine(prepared, cursor, bestInterval.w)
-    if (line === null) break
+    // Sort slots left-to-right and fill each with text
+    slots.sort((a, b) => a.left - b.left)
 
-    lines.push({ text: line.text, width: line.width, x: bestInterval.x, y })
-    cursor = line.end
+    let textExhausted = false
+    for (const slot of slots) {
+      const slotWidth = slot.right - slot.left
+      const line = layoutNextLine(prepared, cursor, slotWidth)
+      if (line === null) { textExhausted = true; break }
+
+      lines.push({
+        text: line.text,
+        x: Math.round(slot.left),
+        y: Math.round(y),
+        width: line.width,
+      })
+      cursor = line.end
+    }
+
+    if (textExhausted) break
     y += lineHeight
   }
 
-  return { lines, height: y - blockTop }
+  return { lines, height: y - regionTop }
 }
 
 // =============================================
@@ -260,32 +243,43 @@ function getContentWidth() {
   return p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
 }
 
+// Render a text block's lines as absolutely-positioned spans (editorial-engine pattern)
 function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour) {
   container.innerHTML = ''
 
-  if (useContour && dragon.contour) {
+  const prepared = prepareWithSegments(text, font)
+
+  if (useContour && marker.contour) {
     const cRect = container.getBoundingClientRect()
     const scrollTop = document.getElementById('scroll-container').scrollTop
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
 
-    const result = layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, maxWidth, dragon.x, dragon.y)
+    const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight)
+
+    // Set container height
+    container.style.height = result.height + 'px'
+    container.style.position = 'relative'
+
     for (const line of result.lines) {
-      const d = document.createElement('div')
-      d.className = 'pt-line'
-      d.style.font = font
-      d.style.lineHeight = lineHeight + 'px'
-      const offset = line.x - blockLeft
-      if (Math.abs(offset) > 1) d.style.marginLeft = offset + 'px'
-      d.textContent = line.text
-      container.appendChild(d)
+      const span = document.createElement('span')
+      span.className = 'pt-line'
+      span.style.font = font
+      span.style.lineHeight = lineHeight + 'px'
+      span.style.left = (line.x - blockLeft) + 'px'
+      span.style.top = (line.y - blockTop) + 'px'
+      span.textContent = line.text
+      container.appendChild(span)
     }
   } else {
-    const prepared = prepareWithSegments(text, font)
+    // Standard layout without marker
     const result = layoutWithLines(prepared, maxWidth, lineHeight)
+    container.style.height = ''
+    container.style.position = ''
+
     for (const line of result.lines) {
       const d = document.createElement('div')
-      d.className = 'pt-line'
+      d.className = 'pt-line-static'
       d.style.font = font
       d.style.lineHeight = lineHeight + 'px'
       d.textContent = line.text
@@ -295,7 +289,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 }
 
 function relayoutAll() {
-  const useContour = !!dragon.contour
+  const useContour = !!marker.contour
   for (const b of registeredBlocks) {
     layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour)
   }
@@ -489,31 +483,30 @@ function renderColophon(block) {
 }
 
 // =============================================
-// Dragon: init + drag (touch-first)
+// Marker: init + drag (touch-first, mobile-first)
 // =============================================
 
-function initDragon() {
+function initMarker() {
   const scrollContainer = document.getElementById('scroll-container')
   const parchment = document.getElementById('parchment')
   const pRect = parchment.getBoundingClientRect()
 
   const svgEl = createMarkerElement()
   const el = document.createElement('div')
-  el.id = 'dragon'
+  el.id = 'marker'
   el.setAttribute('role', 'img')
   el.setAttribute('aria-label', 'Lesezeichen — ziehe mich über den Text')
   el.appendChild(svgEl)
   document.body.appendChild(el)
-  dragon.el = el
+  marker.el = el
 
-  // Initial position: top-right area of parchment
-  dragon.x = pRect.right - MARKER_WIDTH - 20
-  dragon.y = pRect.top + 50
-  updateDragonPos()
+  marker.x = pRect.right - MARKER_WIDTH - 20
+  marker.y = pRect.top + 50
+  updateMarkerPos()
 
-  // Compute the actual SVG silhouette contour for precise text wrapping
-  computeDragonContour(svgEl).then(contour => {
-    dragon.contour = contour
+  // Compute contour from SVG shape
+  computeContour(svgEl).then(contour => {
+    marker.contour = contour
     scheduleRelayout()
   })
 
@@ -521,56 +514,56 @@ function initDragon() {
   el.addEventListener('touchstart', (e) => {
     e.preventDefault()
     const t = e.touches[0]
-    dragon.dragging = true
-    dragon.offsetX = t.clientX - dragon.x
-    dragon.offsetY = t.clientY - dragon.y
+    marker.dragging = true
+    marker.offsetX = t.clientX - marker.x
+    marker.offsetY = t.clientY - marker.y
     el.classList.add('dragging')
   }, { passive: false })
 
   document.addEventListener('touchmove', (e) => {
-    if (!dragon.dragging) return
+    if (!marker.dragging) return
     e.preventDefault()
     const t = e.touches[0]
-    dragon.x = t.clientX - dragon.offsetX
-    dragon.y = t.clientY - dragon.offsetY
-    updateDragonPos()
+    marker.x = t.clientX - marker.offsetX
+    marker.y = t.clientY - marker.offsetY
+    updateMarkerPos()
     scheduleRelayout()
   }, { passive: false })
 
   document.addEventListener('touchend', () => {
-    if (!dragon.dragging) return
-    dragon.dragging = false
+    if (!marker.dragging) return
+    marker.dragging = false
     el.classList.remove('dragging')
   })
 
   // --- Mouse ---
   el.addEventListener('mousedown', (e) => {
     e.preventDefault()
-    dragon.dragging = true
-    dragon.offsetX = e.clientX - dragon.x
-    dragon.offsetY = e.clientY - dragon.y
+    marker.dragging = true
+    marker.offsetX = e.clientX - marker.x
+    marker.offsetY = e.clientY - marker.y
     el.classList.add('dragging')
   })
 
   document.addEventListener('mousemove', (e) => {
-    if (!dragon.dragging) return
-    dragon.x = e.clientX - dragon.offsetX
-    dragon.y = e.clientY - dragon.offsetY
-    updateDragonPos()
+    if (!marker.dragging) return
+    marker.x = e.clientX - marker.offsetX
+    marker.y = e.clientY - marker.offsetY
+    updateMarkerPos()
     scheduleRelayout()
   })
 
   document.addEventListener('mouseup', () => {
-    if (!dragon.dragging) return
-    dragon.dragging = false
+    if (!marker.dragging) return
+    marker.dragging = false
     el.classList.remove('dragging')
   })
 
   scrollContainer.addEventListener('scroll', () => scheduleRelayout(), { passive: true })
 }
 
-function updateDragonPos() {
-  dragon.el.style.transform = `translate(${dragon.x}px, ${dragon.y}px)`
+function updateMarkerPos() {
+  marker.el.style.transform = `translate(${marker.x}px, ${marker.y}px)`
 }
 
 // =============================================
@@ -581,9 +574,8 @@ function init() {
   document.fonts.ready.then(() => {
     const textureCanvas = document.getElementById('texture-canvas')
     generateParchmentTexture(textureCanvas)
-
     render()
-    initDragon()
+    initMarker()
 
     let resizeTimer
     window.addEventListener('resize', () => {
@@ -592,9 +584,9 @@ function init() {
         generateParchmentTexture(textureCanvas)
         render()
         const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (dragon.x > pRect.right - 40) dragon.x = pRect.right - MARKER_WIDTH - 20
-        if (dragon.x < pRect.left - 50) dragon.x = pRect.left + 20
-        updateDragonPos()
+        if (marker.x > pRect.right - 40) marker.x = pRect.right - MARKER_WIDTH - 20
+        if (marker.x < pRect.left - 50) marker.x = pRect.left + 20
+        updateMarkerPos()
         scheduleRelayout()
       }, 200)
     })
