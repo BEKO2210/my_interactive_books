@@ -4,7 +4,7 @@ import {
   layoutNextLine,
 } from '@chenglou/pretext'
 import { storyBlocks } from './story.js'
-import { createDragonElement, startBlinking, DRAGON_WIDTH, DRAGON_HEIGHT } from './dragon.js'
+import { createMarkerElement, MARKER_WIDTH, MARKER_HEIGHT } from './dragon.js'
 
 // =============================================
 // Font definitions
@@ -88,8 +88,8 @@ function generateParchmentTexture(canvas) {
 
 function computeDragonContour(svgElement) {
   const canvas = document.createElement('canvas')
-  const w = DRAGON_WIDTH
-  const h = DRAGON_HEIGHT
+  const w = MARKER_WIDTH
+  const h = MARKER_HEIGHT
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
@@ -486,17 +486,17 @@ function initDragon() {
   const parchment = document.getElementById('parchment')
   const pRect = parchment.getBoundingClientRect()
 
-  const svgEl = createDragonElement()
+  const svgEl = createMarkerElement()
   const el = document.createElement('div')
   el.id = 'dragon'
   el.setAttribute('role', 'img')
-  el.setAttribute('aria-label', 'Mittelalterlicher Drache — ziehe mich über den Text')
+  el.setAttribute('aria-label', 'Lesezeichen — ziehe mich über den Text')
   el.appendChild(svgEl)
   document.body.appendChild(el)
   dragon.el = el
 
   // Initial position: top-right area of parchment
-  dragon.x = pRect.right - DRAGON_WIDTH - 20
+  dragon.x = pRect.right - MARKER_WIDTH - 20
   dragon.y = pRect.top + 50
   updateDragonPos()
 
@@ -505,8 +505,6 @@ function initDragon() {
     dragon.contour = contour
     scheduleRelayout()
   })
-
-  startBlinking(el)
 
   // --- Touch (mobile-first) ---
   el.addEventListener('touchstart', (e) => {
@@ -583,7 +581,7 @@ function init() {
         generateParchmentTexture(textureCanvas)
         render()
         const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (dragon.x > pRect.right - 40) dragon.x = pRect.right - DRAGON_WIDTH - 20
+        if (dragon.x > pRect.right - 40) dragon.x = pRect.right - MARKER_WIDTH - 20
         if (dragon.x < pRect.left - 50) dragon.x = pRect.left + 20
         updateDragonPos()
         scheduleRelayout()
