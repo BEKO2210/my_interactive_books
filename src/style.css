@@ -71,10 +71,10 @@ html, body {
 }
 
 /* ==========================================
-   DRAGON
+   MARKER (draggable bookmark)
    ========================================== */
 
-#dragon {
+#marker {
   position: fixed;
   top: 0; left: 0;
   z-index: 100;
@@ -83,24 +83,22 @@ html, body {
   user-select: none;
   -webkit-user-select: none;
   will-change: transform;
-  filter: drop-shadow(2px 4px 8px rgba(20, 10, 0, 0.5));
-  transition: filter 0.2s ease;
+  filter: drop-shadow(1px 2px 4px rgba(20, 10, 0, 0.35));
+  transition: filter 0.15s ease;
 }
 
-#dragon svg {
+#marker svg {
   display: block;
   pointer-events: auto;
 }
 
-#dragon:hover {
-  filter: drop-shadow(2px 4px 10px rgba(80, 40, 5, 0.6))
-          drop-shadow(0 0 14px rgba(196, 148, 58, 0.15));
+#marker:hover {
+  filter: drop-shadow(2px 3px 6px rgba(20, 10, 0, 0.45));
 }
 
-#dragon.dragging {
+#marker.dragging {
   cursor: grabbing;
-  filter: drop-shadow(4px 8px 14px rgba(20, 10, 0, 0.65))
-          drop-shadow(0 0 20px rgba(196, 148, 58, 0.2));
+  filter: drop-shadow(3px 5px 8px rgba(20, 10, 0, 0.5));
 }
 
 /* ==========================================
@@ -297,7 +295,17 @@ html, body {
 
 /* --- Pretext laid-out lines --- */
 
+/* Absolutely positioned line (when marker present) */
 .pt-line {
+  position: absolute;
+  white-space: pre;
+  color: #2a1a08;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Static line (normal flow, no marker) */
+.pt-line-static {
   color: #2a1a08;
 }
 
