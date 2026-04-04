@@ -200,9 +200,9 @@ html, body {
   font-family: 'Uncial Antiqua', serif;
   font-size: 3.2em;
   float: left;
-  line-height: 0.82;
+  line-height: 0.65;
   padding-right: 6px;
-  padding-top: 2px;
+  margin-top: -2px;
   color: #6b1a0a;
 }
 
