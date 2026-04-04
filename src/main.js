@@ -30,10 +30,10 @@ const WARNING_LH = 30
 const COLOPHON_LH = 26
 
 // =============================================
-// Dragon state
+// Dragon state + contour
 // =============================================
 
-const DRAGON_PAD = 18
+const CONTOUR_PAD = 8  // px padding around actual silhouette
 
 const dragon = {
   x: 0,
@@ -42,6 +42,7 @@ const dragon = {
   dragging: false,
   offsetX: 0,
   offsetY: 0,
+  contour: null, // array of { left, right } per row (in dragon-local px)
 }
 
 // =============================================
@@ -77,41 +78,150 @@ function generateParchmentTexture(canvas) {
 }
 
 // =============================================
-// Pretext layout with dragon obstacle
+// Dragon contour scanning
 // =============================================
 
-function getDragonObstacle() {
-  if (!dragon.el) return null
+// Render the dragon SVG to an offscreen canvas and scan each row
+// to find the actual left/right edges of the silhouette.
+// Result: an array indexed by Y (in dragon-local px), each entry
+// is { left, right } of the opaque region, or null if empty row.
+
+function computeDragonContour(svgElement) {
+  const canvas = document.createElement('canvas')
+  const w = DRAGON_WIDTH
+  const h = DRAGON_HEIGHT
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // Serialize SVG to an image
+  const svgClone = svgElement.cloneNode(true)
+  svgClone.setAttribute('width', w)
+  svgClone.setAttribute('height', h)
+  const svgData = new XMLSerializer().serializeToString(svgClone)
+  const img = new Image()
+  img.width = w
+  img.height = h
+
+  return new Promise((resolve) => {
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, w, h)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      const data = imageData.data
+      const contour = []
+
+      for (let y = 0; y < h; y++) {
+        let left = -1
+        let right = -1
+        for (let x = 0; x < w; x++) {
+          const alpha = data[(y * w + x) * 4 + 3]
+          if (alpha > 20) {
+            if (left === -1) left = x
+            right = x
+          }
+        }
+        if (left === -1) {
+          contour.push(null)
+        } else {
+          // Add padding around the shape
+          contour.push({
+            left: Math.max(0, left - CONTOUR_PAD),
+            right: Math.min(w, right + CONTOUR_PAD),
+          })
+        }
+      }
+
+      resolve(contour)
+    }
+    img.onerror = () => {
+      // Fallback: rectangular contour
+      const contour = []
+      for (let y = 0; y < h; y++) {
+        contour.push({ left: 0, right: w })
+      }
+      resolve(contour)
+    }
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData)
+  })
+}
+
+// =============================================
+// Pretext layout with contour-based obstacle
+// =============================================
+
+// For a text line at lineTop..lineBot, find the widest dragon span
+// across those rows (in screen coordinates), then compute available text width.
+
+function getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY) {
+  const contour = dragon.contour
+  if (!contour) return null
+
   const scrollTop = document.getElementById('scroll-container').scrollTop
+  const dragonAbsY = dragonScreenY + scrollTop
+
+  // Map line Y range to dragon-local Y
+  const localTop = Math.floor(lineTop - dragonAbsY)
+  const localBot = Math.ceil(lineBot - dragonAbsY)
+
+  // No vertical overlap with dragon
+  if (localBot <= 0 || localTop >= contour.length) return null
+
+  // Find the widest (leftmost left, rightmost right) across the line's rows
+  let minLeft = Infinity
+  let maxRight = -Infinity
+  let hasHit = false
+
+  const startY = Math.max(0, localTop)
+  const endY = Math.min(contour.length, localBot)
+
+  for (let y = startY; y < endY; y++) {
+    const row = contour[y]
+    if (row) {
+      if (row.left < minLeft) minLeft = row.left
+      if (row.right > maxRight) maxRight = row.right
+      hasHit = true
+    }
+  }
+
+  if (!hasHit) return null
+
+  // Convert to screen coordinates
   return {
-    left:   dragon.x - DRAGON_PAD,
-    top:    dragon.y + scrollTop - DRAGON_PAD,
-    right:  dragon.x + DRAGON_WIDTH + DRAGON_PAD,
-    bottom: dragon.y + DRAGON_HEIGHT + DRAGON_PAD,
+    left: dragonScreenX + minLeft,
+    right: dragonScreenX + maxRight,
   }
 }
 
-function lineAvailWidth(lineTop, lineBot, blockLeft, blockWidth, ob) {
-  if (!ob) return { x: blockLeft, w: blockWidth }
-  if (lineBot <= ob.top || lineTop >= ob.bottom) return { x: blockLeft, w: blockWidth }
-  if (ob.right <= blockLeft || ob.left >= blockLeft + blockWidth) return { x: blockLeft, w: blockWidth }
+function lineAvailWidth(lineTop, lineBot, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
+  const span = getContourSpanForLine(lineTop, lineBot, dragonScreenX, dragonScreenY)
 
-  const leftSpace = Math.max(0, ob.left - blockLeft)
-  const rightSpace = Math.max(0, (blockLeft + blockWidth) - ob.right)
+  // No dragon overlap at this line height
+  if (!span) return { x: blockLeft, w: blockWidth }
+
+  const blockRight = blockLeft + blockWidth
+
+  // Dragon contour doesn't overlap block horizontally
+  if (span.right <= blockLeft || span.left >= blockRight) {
+    return { x: blockLeft, w: blockWidth }
+  }
+
+  // Dragon is in the way — pick the bigger side
+  const leftSpace = Math.max(0, span.left - blockLeft)
+  const rightSpace = Math.max(0, blockRight - span.right)
 
   if (leftSpace >= rightSpace && leftSpace > 50) return { x: blockLeft, w: leftSpace }
-  if (rightSpace > 50) return { x: ob.right, w: rightSpace }
-  return null
+  if (rightSpace > 50) return { x: span.right, w: rightSpace }
+  return null // fully blocked
 }
 
-function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, ob) {
+function layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, blockWidth, dragonScreenX, dragonScreenY) {
   const prepared = prepareWithSegments(text, font)
   const lines = []
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = blockTop
 
   for (let safe = 0; safe < 500; safe++) {
-    const avail = lineAvailWidth(y, y + lineHeight, blockLeft, blockWidth, ob)
+    const avail = lineAvailWidth(y, y + lineHeight, blockLeft, blockWidth, dragonScreenX, dragonScreenY)
     if (!avail) { y += lineHeight; continue }
 
     const line = layoutNextLine(prepared, cursor, avail.w)
@@ -139,16 +249,16 @@ function getContentWidth() {
   return p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
 }
 
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, ob) {
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour) {
   container.innerHTML = ''
 
-  if (ob) {
+  if (useContour && dragon.contour) {
     const cRect = container.getBoundingClientRect()
     const scrollTop = document.getElementById('scroll-container').scrollTop
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
 
-    const result = layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, maxWidth, ob)
+    const result = layoutAroundDragon(text, font, lineHeight, blockTop, blockLeft, maxWidth, dragon.x, dragon.y)
     for (const line of result.lines) {
       const d = document.createElement('div')
       d.className = 'pt-line'
@@ -174,9 +284,9 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, ob) {
 }
 
 function relayoutAll() {
-  const ob = getDragonObstacle()
+  const useContour = !!dragon.contour
   for (const b of registeredBlocks) {
-    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, ob)
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour)
   }
 }
 
@@ -376,11 +486,12 @@ function initDragon() {
   const parchment = document.getElementById('parchment')
   const pRect = parchment.getBoundingClientRect()
 
+  const svgEl = createDragonElement()
   const el = document.createElement('div')
   el.id = 'dragon'
   el.setAttribute('role', 'img')
   el.setAttribute('aria-label', 'Mittelalterlicher Drache — ziehe mich über den Text')
-  el.appendChild(createDragonElement())
+  el.appendChild(svgEl)
   document.body.appendChild(el)
   dragon.el = el
 
@@ -388,6 +499,12 @@ function initDragon() {
   dragon.x = pRect.right - DRAGON_WIDTH - 20
   dragon.y = pRect.top + 50
   updateDragonPos()
+
+  // Compute the actual SVG silhouette contour for precise text wrapping
+  computeDragonContour(svgEl).then(contour => {
+    dragon.contour = contour
+    scheduleRelayout()
+  })
 
   startBlinking(el)
 
