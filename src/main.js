@@ -256,30 +256,9 @@ function getContentWidth() {
   return p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)
 }
 
-// Render a text block's lines as absolutely-positioned spans (editorial-engine pattern)
-// Measure drop cap element and return a rect obstacle in absolute coords
-function measureDropCap(initialEl, lineHeight) {
-  if (!initialEl || !initialEl.parentElement) return null
-  const rect = initialEl.getBoundingClientRect()
-  if (rect.width === 0) return null
-  const scrollTop = document.getElementById('scroll-container').scrollTop
-  return [{
-    left: rect.left - 2,
-    top: rect.top + scrollTop - 2,
-    right: rect.right + 4,
-    bottom: rect.top + scrollTop + lineHeight * 3 + 4,
-  }]
-}
-
-function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour, initialEl) {
-  // Guard: skip if width is invalid
+function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour) {
   if (maxWidth < 30) return
-
-  // Remove all children EXCEPT the initial element
-  const children = Array.from(container.children)
-  for (const child of children) {
-    if (child !== initialEl) container.removeChild(child)
-  }
+  container.innerHTML = ''
 
   const prepared = prepareWithSegments(text, font)
 
@@ -289,10 +268,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
     const blockTop = cRect.top + scrollTop
     const blockLeft = cRect.left
 
-    // Live-measure drop cap for rect obstacle
-    const rectObstacles = measureDropCap(initialEl, lineHeight)
-
-    const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight, rectObstacles)
+    const result = layoutTextBlock(prepared, blockLeft, blockTop, maxWidth, lineHeight, null)
 
     container.style.height = result.height + 'px'
     container.style.position = 'relative'
@@ -326,7 +302,7 @@ function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContou
 function relayoutAll() {
   const useContour = !!stern.contour
   for (const b of registeredBlocks) {
-    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour, b.initialEl || null)
+    layoutBlockLines(b.el, b.text, b.font, b.lineHeight, b.maxWidth, useContour)
   }
 }
 
@@ -411,18 +387,16 @@ function renderBody(block, narrowW, shortW) {
   const wrapper = document.createElement('div')
   wrapper.className = cls
 
-  // Drop cap is placed inside the lines container so it's measured relative to it
-  const lc = document.createElement('div')
-  lc.className = 'ms-body pt-lines-container'
-
-  let iniEl = null
+  // Initiale as simple inline element before the text container
   if (block.initial) {
-    iniEl = document.createElement('span')
-    iniEl.className = 'ms-initial'
-    iniEl.textContent = block.initial
-    lc.appendChild(iniEl)
+    const ini = document.createElement('span')
+    ini.className = 'ms-initial'
+    ini.textContent = block.initial
+    wrapper.appendChild(ini)
   }
 
+  const lc = document.createElement('div')
+  lc.className = 'ms-body pt-lines-container'
   wrapper.appendChild(lc)
 
   if (block.marginal) {
@@ -433,16 +407,8 @@ function renderBody(block, narrowW, shortW) {
   }
 
   manuscriptEl.appendChild(wrapper)
-
-  // Store reference to initial element for live measurement during relayout
-  registerBlock(lc, {
-    text: block.text,
-    font: BODY_FONT,
-    lineHeight: BODY_LH,
-    maxWidth: maxW,
-    initialEl: iniEl,
-  })
-  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null, null)
+  registerBlock(lc, { text: block.text, font: BODY_FONT, lineHeight: BODY_LH, maxWidth: maxW })
+  layoutBlockLines(lc, block.text, BODY_FONT, BODY_LH, maxW, null)
 }
 
 function renderHighlight(block) {

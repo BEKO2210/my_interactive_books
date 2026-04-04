@@ -195,15 +195,13 @@ html, body {
 }
 
 .ms-initial {
-  position: absolute;
-  top: 0;
-  left: 0;
+  float: left;
   font-family: 'Uncial Antiqua', serif;
   font-size: 3.2em;
-  line-height: 0.85;
-  padding-right: 4px;
+  line-height: 0.82;
+  padding-right: 6px;
+  padding-top: 2px;
   color: #6b1a0a;
-  z-index: 2;
 }
 
 /* --- Marginal notes --- */
