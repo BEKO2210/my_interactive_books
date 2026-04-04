@@ -194,10 +194,12 @@ html, body {
   max-width: 72%;
 }
 
-.ms-initial {
-  float: left;
+/* Drop cap via ::first-letter — no overlap, pure CSS */
+.has-dropcap .pt-line-static:first-child::first-letter,
+.has-dropcap .pt-line:first-child::first-letter {
   font-family: 'Uncial Antiqua', serif;
   font-size: 3.2em;
+  float: left;
   line-height: 0.82;
   padding-right: 6px;
   padding-top: 2px;
@@ -371,7 +373,8 @@ html, body {
     font-size: 17px;
   }
 
-  .ms-initial {
+  .has-dropcap .pt-line-static:first-child::first-letter,
+  .has-dropcap .pt-line:first-child::first-letter {
     font-size: 3.5em;
   }
 
@@ -418,7 +421,8 @@ html, body {
     font-size: 18px;
   }
 
-  .ms-initial {
+  .has-dropcap .pt-line-static:first-child::first-letter,
+  .has-dropcap .pt-line:first-child::first-letter {
     font-size: 3.8em;
     padding-right: 8px;
   }

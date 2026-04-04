@@ -16,9 +16,9 @@ export const storyBlocks = [
   // --- I. ANKUNFT ---
   {
     type: 'body',
-    initial: 'I',
+    dropcap: true,
     marginal: { side: 'right', text: 'Annus\nDomini\nMCCCCXL' },
-    text: 'n dem Jahre, da unser Herr eintausendvierhundertvierzig Sommer über die Erde gezählt hatte, geschah es in den Gassen der Stadt Moguntia, die man auch Mainz nennet, dass ein Fremder aus dem Nebel trat. Nicht kam er auf einem Pferde, nicht auf einem Wagen, nicht mit Gefolge oder Wappen. Er trug Kleider von sonderbarer Machart, die kein Schneider der Stadt zu deuten wusste, und sein Haar war kurz geschoren wie das eines Büßers, doch sprach sein Blick nicht von Demut, sondern von einer Verwirrung, die tiefer reichte als jede irdische Verirrung.'
+    text: 'In dem Jahre, da unser Herr eintausendvierhundertvierzig Sommer über die Erde gezählt hatte, geschah es in den Gassen der Stadt Moguntia, die man auch Mainz nennet, dass ein Fremder aus dem Nebel trat. Nicht kam er auf einem Pferde, nicht auf einem Wagen, nicht mit Gefolge oder Wappen. Er trug Kleider von sonderbarer Machart, die kein Schneider der Stadt zu deuten wusste, und sein Haar war kurz geschoren wie das eines Büßers, doch sprach sein Blick nicht von Demut, sondern von einer Verwirrung, die tiefer reichte als jede irdische Verirrung.'
   },
   {
     type: 'body',
@@ -43,8 +43,8 @@ export const storyBlocks = [
   // --- II. ERSTE BEGEGNUNG ---
   {
     type: 'body',
-    initial: 'D',
-    text: 'er Fremde sprach unsere Zunge, doch mit einem Klang, als forme er die Worte aus einer anderen Zeit. Er bat um Brot, um Wasser, um einen Ort zum Schlafen. Die Mönche des Karmeliterklosters nahmen ihn auf, denn er trug kein Schwert und schien harmlos. Doch bereits in der ersten Nacht begann das Raunen.'
+    dropcap: true,
+    text: 'Der Fremde sprach unsere Zunge, doch mit einem Klang, als forme er die Worte aus einer anderen Zeit. Er bat um Brot, um Wasser, um einen Ort zum Schlafen. Die Mönche des Karmeliterklosters nahmen ihn auf, denn er trug kein Schwert und schien harmlos. Doch bereits in der ersten Nacht begann das Raunen.'
   },
   {
     type: 'body',
@@ -80,8 +80,8 @@ export const storyBlocks = [
   // --- IV. GUTENBERGS WERKSTATT ---
   {
     type: 'body',
-    initial: 'E',
-    text: 's war der Goldschmied Johannes Gensfleisch, den man Gutenberg nannte, der den Fremden schließlich in seine Werkstatt holte. Gutenberg hatte von dem Fremden gehört, von seinem Lichtkasten und seinen erstaunlichen Kenntnissen, und Gutenberg war ein Mann, der Wissen nicht fürchtete, sondern jagte, wie andere Männer Wild jagten.'
+    dropcap: true,
+    text: 'Es war der Goldschmied Johannes Gensfleisch, den man Gutenberg nannte, der den Fremden schließlich in seine Werkstatt holte. Gutenberg hatte von dem Fremden gehört, von seinem Lichtkasten und seinen erstaunlichen Kenntnissen, und Gutenberg war ein Mann, der Wissen nicht fürchtete, sondern jagte, wie andere Männer Wild jagten.'
   },
   {
     type: 'body',
@@ -108,9 +108,9 @@ export const storyBlocks = [
   // --- V. DAS ORAKEL BEWEIST SICH ---
   {
     type: 'body',
-    initial: 'I',
+    dropcap: true,
     marginal: { side: 'right', text: 'Arcana\nartis\ntypographicae' },
-    text: 'n den folgenden Wochen nutzte der Fremde sein Gerät auf Arten, die der Chronist mit wachsendem Staunen festhielt. Er bat das Orakel um Hilfestellungen, die kein einzelner Gelehrter seiner Zeit hätte geben können, und stets antwortete der Kasten mit ruhiger, leuchtender Schrift:'
+    text: 'In den folgenden Wochen nutzte der Fremde sein Gerät auf Arten, die der Chronist mit wachsendem Staunen festhielt. Er bat das Orakel um Hilfestellungen, die kein einzelner Gelehrter seiner Zeit hätte geben können, und stets antwortete der Kasten mit ruhiger, leuchtender Schrift:'
   },
   {
     type: 'list',
@@ -136,8 +136,8 @@ export const storyBlocks = [
   // --- VI. BESCHLEUNIGUNG ---
   {
     type: 'body',
-    initial: 'D',
-    text: 'ie Arbeit beschleunigte sich. Der Fremde half bei der Strukturierung der ersten Druckbögen. Er zeigte Gutenberg, wie man Texte in Absätze gliedert, die das Auge führen. Wie man Überschriften setzt, die den Inhalt ankündigen. Wie man Listen und Tabellen verwendet, um Wissen zu verdichten. Dinge, die uns heute selbstverständlich erscheinen, waren es damals nicht. Die Handschriften der Mönche kannten Initialen und Rubrizierungen, doch die systematische Ordnung von Wissen auf einer gedruckten Seite, das war neu.'
+    dropcap: true,
+    text: 'Die Arbeit beschleunigte sich. Der Fremde half bei der Strukturierung der ersten Druckbögen. Er zeigte Gutenberg, wie man Texte in Absätze gliedert, die das Auge führen. Wie man Überschriften setzt, die den Inhalt ankündigen. Wie man Listen und Tabellen verwendet, um Wissen zu verdichten. Dinge, die uns heute selbstverständlich erscheinen, waren es damals nicht. Die Handschriften der Mönche kannten Initialen und Rubrizierungen, doch die systematische Ordnung von Wissen auf einer gedruckten Seite, das war neu.'
   },
   {
     type: 'body',
@@ -151,9 +151,9 @@ export const storyBlocks = [
   // --- VII. GEFAHR ---
   {
     type: 'body',
-    initial: 'D',
+    dropcap: true,
     marginal: { side: 'left', text: 'Periculum\nhaeresis\nimpendit' },
-    text: 'och das Glück des Verborgenen währte nicht. Ein Geselle Gutenbergs, dessen Namen der Codex nicht nennt, verriet dem Domkapitel, dass in der Werkstatt ein Mann verkehre, der mit einem leuchtenden Stein spreche und Antworten aus dem Nichts empfange. Der Vikar Johannes von Lahr, bekannt für seinen Eifer gegen Ketzerei und Aberglauben, sandte Männer zur Werkstatt.'
+    text: 'Doch das Glück des Verborgenen währte nicht. Ein Geselle Gutenbergs, dessen Namen der Codex nicht nennt, verriet dem Domkapitel, dass in der Werkstatt ein Mann verkehre, der mit einem leuchtenden Stein spreche und Antworten aus dem Nichts empfange. Der Vikar Johannes von Lahr, bekannt für seinen Eifer gegen Ketzerei und Aberglauben, sandte Männer zur Werkstatt.'
   },
   {
     type: 'body',
@@ -173,8 +173,8 @@ export const storyBlocks = [
   // --- VIII. VERSCHWINDEN ---
   {
     type: 'body',
-    initial: 'V',
-    text: 'om Fremden selbst gibt es keine weitere Spur. Der Codex Moguntinus erwähnt ihn danach nur noch einmal, in einem Nachtrag, der in einer anderen Hand geschrieben ist, flüchtiger, als hätte jemand in Eile Zeugnis ablegen wollen:'
+    dropcap: true,
+    text: 'Vom Fremden selbst gibt es keine weitere Spur. Der Codex Moguntinus erwähnt ihn danach nur noch einmal, in einem Nachtrag, der in einer anderen Hand geschrieben ist, flüchtiger, als hätte jemand in Eile Zeugnis ablegen wollen:'
   },
   {
     type: 'quote',
