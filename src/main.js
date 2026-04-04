@@ -272,6 +272,9 @@ function measureDropCap(initialEl, lineHeight) {
 }
 
 function layoutBlockLines(container, text, font, lineHeight, maxWidth, useContour, initialEl) {
+  // Guard: skip if width is invalid
+  if (maxWidth < 30) return
+
   // Remove all children EXCEPT the initial element
   const children = Array.from(container.children)
   for (const child of children) {
@@ -345,6 +348,12 @@ function render() {
   manuscriptEl.innerHTML = ''
   registeredBlocks = []
   contentWidth = getContentWidth()
+
+  // Guard: if layout isn't ready yet, retry after a frame
+  if (contentWidth < 100) {
+    requestAnimationFrame(() => render())
+    return
+  }
 
   const narrowW = Math.min(contentWidth * 0.78, contentWidth - 40)
   const shortW = Math.min(contentWidth * 0.62, contentWidth - 80)
@@ -650,24 +659,42 @@ function updateSternPos() {
 // =============================================
 
 function init() {
+  // Wait for fonts AND a small delay to ensure layout is ready
   document.fonts.ready.then(() => {
-    const textureCanvas = document.getElementById('texture-canvas')
-    generateParchmentTexture(textureCanvas)
-    render()
-    initStern()
-
-    let resizeTimer
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimer)
-      resizeTimer = setTimeout(() => {
+    // Extra frame delay to ensure CSS layout is computed
+    requestAnimationFrame(() => {
+      try {
+        const textureCanvas = document.getElementById('texture-canvas')
         generateParchmentTexture(textureCanvas)
         render()
-        const pRect = document.getElementById('parchment').getBoundingClientRect()
-        if (stern.x > pRect.right - 40) stern.x = pRect.right - STERN_SIZE - 20
-        if (stern.x < pRect.left - 50) stern.x = pRect.left + 20
-        updateSternPos()
-        scheduleRelayout()
-      }, 200)
+        initStern()
+      } catch (e) {
+        console.error('Init error:', e)
+        // Fallback: show text without Pretext layout
+        const m = document.getElementById('manuscript')
+        if (m && m.children.length === 0) {
+          m.style.font = '18px serif'
+          m.style.color = '#2a1a08'
+          m.textContent = 'Fehler beim Laden. Bitte Seite neu laden.'
+        }
+      }
+
+      let resizeTimer
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(() => {
+          try {
+            const textureCanvas = document.getElementById('texture-canvas')
+            generateParchmentTexture(textureCanvas)
+            render()
+            const pRect = document.getElementById('parchment').getBoundingClientRect()
+            if (stern.x > pRect.right - 40) stern.x = pRect.right - STERN_SIZE - 20
+            if (stern.x < pRect.left - 50) stern.x = pRect.left + 20
+            updateSternPos()
+            scheduleRelayout()
+          } catch (e) { console.error('Resize error:', e) }
+        }, 200)
+      })
     })
   })
 }
